@@ -538,6 +538,7 @@ function setupAuthModals() {
     if (event === 'SIGNED_IN' && session?.user) {
       currentUser = session.user;
       renderUserMenu(session.user);
+      checkAdmin(session.user).then(showAdminBtn);
     }
     if (event === 'SIGNED_OUT') {
       currentUser = null;
@@ -550,6 +551,7 @@ function setupAuthModals() {
     if (data?.user) {
       currentUser = data.user;
       renderUserMenu(data.user);
+      checkAdmin(data.user).then(showAdminBtn);
     }
   });
 }
@@ -593,6 +595,208 @@ function renderUserMenu(user) {
   });
 
   document.getElementById('logout-btn')?.addEventListener('click', logout);
+}
+
+/* =====================================================
+   PANEL ADMINISTRACIÓN
+   ===================================================== */
+async function checkAdmin(user) {
+  if (!user) return false;
+  const { data } = await db
+    .from('perfiles')
+    .select('es_admin')
+    .eq('id', user.id)
+    .single();
+  return data?.es_admin === true;
+}
+
+function showAdminBtn(show) {
+  const btn = document.getElementById('drawer-admin-btn');
+  if (btn) btn.style.display = show ? 'flex' : 'none';
+}
+
+function openAdminPanel() {
+  const modal = document.getElementById('admin-modal');
+  modal?.classList.add('is-open');
+  modal?.setAttribute('aria-hidden', 'false');
+  loadAdminProductos();
+}
+
+function closeAdminPanel() {
+  const modal = document.getElementById('admin-modal');
+  modal?.classList.remove('is-open');
+  modal?.setAttribute('aria-hidden', 'true');
+}
+
+function setupAdminPanel() {
+  document.getElementById('admin-close')?.addEventListener('click', closeAdminPanel);
+  document.getElementById('admin-overlay')?.addEventListener('click', closeAdminPanel);
+  document.getElementById('drawer-admin-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('drawer')?.classList.remove('is-open');
+    openAdminPanel();
+  });
+
+  /* Tabs */
+  document.querySelectorAll('.admin-nav-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.admin-nav-btn').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.admin-tab').forEach((t) => t.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = document.getElementById(`tab-${btn.dataset.tab}`);
+      tab?.classList.add('active');
+      if (btn.dataset.tab === 'pedidos') loadAdminPedidos();
+      if (btn.dataset.tab === 'productos') loadAdminProductos();
+    });
+  });
+
+  /* Formulario producto */
+  document.getElementById('btn-nuevo-producto')?.addEventListener('click', () => {
+    resetProductoForm();
+    document.getElementById('producto-form-box').style.display = 'block';
+    document.getElementById('producto-form-title').textContent = 'Nuevo Producto';
+  });
+
+  document.getElementById('cancelar-producto')?.addEventListener('click', () => {
+    document.getElementById('producto-form-box').style.display = 'none';
+    resetProductoForm();
+  });
+
+  document.getElementById('producto-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await guardarProducto();
+  });
+}
+
+function resetProductoForm() {
+  document.getElementById('producto-id').value = '';
+  document.getElementById('p-nombre').value = '';
+  document.getElementById('p-precio').value = '';
+  document.getElementById('p-categoria').value = 'alimentos';
+  document.getElementById('p-imagen').value = '';
+  document.getElementById('p-descripcion').value = '';
+  document.getElementById('p-destacado').checked = false;
+}
+
+async function guardarProducto() {
+  const id          = document.getElementById('producto-id').value;
+  const nombre      = document.getElementById('p-nombre').value.trim();
+  const precio      = parseFloat(document.getElementById('p-precio').value);
+  const categoria   = document.getElementById('p-categoria').value;
+  const imagen_url  = document.getElementById('p-imagen').value.trim();
+  const descripcion = document.getElementById('p-descripcion').value.trim();
+  const destacado   = document.getElementById('p-destacado').checked;
+
+  const payload = { nombre, precio, categoria, imagen_url, descripcion, destacado };
+  let error;
+
+  if (id) {
+    ({ error } = await db.from('productos').update(payload).eq('id', id));
+  } else {
+    ({ error } = await db.from('productos').insert(payload));
+  }
+
+  if (error) { showToast(error.message, 'error'); return; }
+
+  showToast(id ? 'Producto actualizado ✓' : 'Producto agregado ✓');
+  document.getElementById('producto-form-box').style.display = 'none';
+  resetProductoForm();
+  loadAdminProductos();
+  loadProducts(); /* Refresca el catálogo visible */
+}
+
+async function loadAdminProductos() {
+  const tbody = document.getElementById('admin-productos-body');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>`;
+
+  const { data, error } = await db.from('productos').select('*').order('created_at', { ascending: false });
+
+  if (error || !data?.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="admin-loading">No hay productos aún.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map((p) => `
+    <tr data-id="${p.id}">
+      <td><img class="admin-table__img" src="${p.imagen_url || 'img/img/arroz.jpg'}" alt="${p.nombre}" /></td>
+      <td><strong>${p.nombre}</strong></td>
+      <td>$${Number(p.precio).toFixed(2)}</td>
+      <td>${p.categoria || '—'}</td>
+      <td>
+        <div class="admin-table__actions">
+          <button class="admin-btn admin-btn--edit" data-action="editar" data-id="${p.id}" type="button">
+            <i class="fas fa-pen"></i> Editar
+          </button>
+          <button class="admin-btn admin-btn--delete" data-action="eliminar" data-id="${p.id}" type="button">
+            <i class="fas fa-trash"></i> Eliminar
+          </button>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  /* Guardar data para edición */
+  window._adminProductos = data;
+
+  tbody.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const id = btn.dataset.id;
+
+    if (btn.dataset.action === 'eliminar') {
+      if (!confirm('¿Eliminar este producto?')) return;
+      const { error } = await db.from('productos').delete().eq('id', id);
+      if (error) { showToast(error.message, 'error'); return; }
+      showToast('Producto eliminado', 'error');
+      loadAdminProductos();
+      loadProducts();
+    }
+
+    if (btn.dataset.action === 'editar') {
+      const p = window._adminProductos?.find((x) => x.id === id);
+      if (!p) return;
+      document.getElementById('producto-id').value        = p.id;
+      document.getElementById('p-nombre').value           = p.nombre;
+      document.getElementById('p-precio').value           = p.precio;
+      document.getElementById('p-categoria').value        = p.categoria || 'general';
+      document.getElementById('p-imagen').value           = p.imagen_url || '';
+      document.getElementById('p-descripcion').value      = p.descripcion || '';
+      document.getElementById('p-destacado').checked      = p.destacado || false;
+      document.getElementById('producto-form-title').textContent = 'Editar Producto';
+      document.getElementById('producto-form-box').style.display = 'block';
+      document.getElementById('producto-form-box').scrollIntoView({ behavior: 'smooth' });
+    }
+  }, { once: false });
+}
+
+async function loadAdminPedidos() {
+  const tbody = document.getElementById('admin-pedidos-body');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>`;
+
+  const { data, error } = await db
+    .from('pedidos')
+    .select('*, perfiles(nombre)')
+    .order('created_at', { ascending: false });
+
+  if (error || !data?.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="admin-loading">No hay pedidos aún.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map((p) => {
+    const fecha   = new Date(p.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+    const cliente = p.perfiles?.nombre || '—';
+    const items   = (p.items || []).map((i) => `${i.name} x${i.qty}`).join(', ');
+    return `
+      <tr>
+        <td>${fecha}</td>
+        <td>${cliente}</td>
+        <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items}</td>
+        <td><strong>$${Number(p.total).toFixed(2)}</strong></td>
+        <td><span class="admin-badge admin-badge--${p.estado}">${p.estado}</span></td>
+      </tr>`;
+  }).join('');
 }
 
 /* =====================================================
@@ -655,6 +859,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupDrawer();
   setupFilters();
   setupAuthModals();
+  setupAdminPanel();
   await loadProducts();
   applySearch();
 });

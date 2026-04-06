@@ -282,7 +282,7 @@
         <div class="footer__section">
           <h3 class="footer__title">H &amp; L ALIMCERV</h3>
           <p class="footer__text footer__text--sub">Group · ESTD 2025</p>
-          <p class="footer__text">Tu proveedor de confianza en alimentos y bebidas de calidad.</p>
+          <p class="footer__text">Tu proveedor de confianza en productos de calidad.</p>
 
           <div class="footer__social">
             <a href="#" class="social-link" aria-label="Facebook">
@@ -376,6 +376,9 @@
           <a class="drawer__link" href="https://wa.me/529621643422" target="_blank" rel="noopener">
             <i class="fab fa-whatsapp"></i> WhatsApp
           </a>
+          <button class="drawer__link drawer__admin-btn" id="drawer-admin-btn" type="button" style="display:none;">
+            <i class="fas fa-shield-halved"></i> Panel Admin
+          </button>
         </nav>
 
         <div class="drawer__auth">
@@ -469,6 +472,133 @@
             </p>
           </form>
         </div>
+      </div>
+    </div>
+
+    <!-- Panel Administración -->
+    <div class="modal admin-modal" id="admin-modal" aria-hidden="true">
+      <div class="modal__overlay" id="admin-overlay"></div>
+      <div class="admin-panel">
+
+        <!-- Sidebar -->
+        <aside class="admin-sidebar">
+          <div class="admin-sidebar__brand">
+            <i class="fas fa-shield-halved"></i>
+            <span>Admin</span>
+          </div>
+          <nav class="admin-sidebar__nav">
+            <button class="admin-nav-btn active" data-tab="productos" type="button">
+              <i class="fas fa-box"></i> Productos
+            </button>
+            <button class="admin-nav-btn" data-tab="pedidos" type="button">
+              <i class="fas fa-receipt"></i> Pedidos
+            </button>
+          </nav>
+          <button class="admin-sidebar__close" id="admin-close" type="button">
+            <i class="fas fa-times"></i> Cerrar
+          </button>
+        </aside>
+
+        <!-- Contenido -->
+        <main class="admin-content">
+
+          <!-- Tab Productos -->
+          <div class="admin-tab active" id="tab-productos">
+            <div class="admin-content__header">
+              <h2><i class="fas fa-box"></i> Gestión de Productos</h2>
+              <button class="btn btn--gold" id="btn-nuevo-producto" type="button">
+                <i class="fas fa-plus"></i> Nuevo producto
+              </button>
+            </div>
+
+            <!-- Formulario agregar/editar -->
+            <div class="admin-form-box" id="producto-form-box" style="display:none;">
+              <h3 id="producto-form-title">Nuevo Producto</h3>
+              <form id="producto-form">
+                <input type="hidden" id="producto-id" />
+                <div class="admin-form__grid">
+                  <div class="admin-form__group">
+                    <label>Nombre</label>
+                    <input id="p-nombre" type="text" placeholder="Nombre del producto" required />
+                  </div>
+                  <div class="admin-form__group">
+                    <label>Precio ($)</label>
+                    <input id="p-precio" type="number" placeholder="0.00" step="0.01" required />
+                  </div>
+                  <div class="admin-form__group">
+                    <label>Categoría</label>
+                    <select id="p-categoria">
+                      <option value="alimentos">Alimentos</option>
+                      <option value="bebidas">Bebidas</option>
+                      <option value="aceites">Aceites</option>
+                      <option value="general">General</option>
+                    </select>
+                  </div>
+                  <div class="admin-form__group">
+                    <label>URL de imagen</label>
+                    <input id="p-imagen" type="text" placeholder="img/img/producto.jpg" />
+                  </div>
+                  <div class="admin-form__group admin-form__group--full">
+                    <label>Descripción</label>
+                    <textarea id="p-descripcion" rows="2" placeholder="Descripción del producto"></textarea>
+                  </div>
+                  <div class="admin-form__group">
+                    <label class="admin-check">
+                      <input id="p-destacado" type="checkbox" />
+                      <span>Destacado (badge "Nuevo")</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="admin-form__actions">
+                  <button class="btn btn--gold" type="submit"><i class="fas fa-save"></i> Guardar</button>
+                  <button class="btn btn--ghost" type="button" id="cancelar-producto"><i class="fas fa-times"></i> Cancelar</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Tabla de productos -->
+            <div class="admin-table-wrapper">
+              <table class="admin-table" id="admin-productos-table">
+                <thead>
+                  <tr>
+                    <th>Imagen</th>
+                    <th>Nombre</th>
+                    <th>Precio</th>
+                    <th>Categoría</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-productos-body">
+                  <tr><td colspan="5" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab Pedidos -->
+          <div class="admin-tab" id="tab-pedidos">
+            <div class="admin-content__header">
+              <h2><i class="fas fa-receipt"></i> Pedidos Recibidos</h2>
+            </div>
+            <div class="admin-table-wrapper">
+              <table class="admin-table" id="admin-pedidos-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Productos</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-pedidos-body">
+                  <tr><td colspan="5" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </main>
       </div>
     </div>
 
