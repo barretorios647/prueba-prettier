@@ -1,22 +1,25 @@
 /* =====================================================
-   H & L ALIMCERV — App principal
+   H & L ALIMCERV — App con Supabase
    ===================================================== */
 
 const WHATSAPP_NUMBER = '529621643422';
 
 /* ── Elementos del DOM ── */
-const productsGrid     = document.getElementById('productos');
-const productCards     = Array.from(document.querySelectorAll('.producto'));
-const searchInput      = document.getElementById('q');
-const cartModal        = document.getElementById('cart-modal');
-const openCartBtn      = document.getElementById('open-cart');
-const cartCloseBtn     = document.querySelector('.modal__close');
-const cartOverlay      = document.querySelector('.modal__overlay');
-const cartItemsEl      = document.getElementById('cart-items');
-const cartCountEl      = document.getElementById('cart-count');
-const cartTotalEl      = document.getElementById('cart-total');
-const checkoutBtn      = document.getElementById('checkout-btn');
-const yearEl           = document.getElementById('year');
+const productsGrid   = document.getElementById('productos');
+const searchInput    = document.getElementById('q');
+const cartModal      = document.getElementById('cart-modal');
+const openCartBtn    = document.getElementById('open-cart');
+const cartCloseBtn   = document.querySelector('.modal__close');
+const cartOverlay    = document.querySelector('.modal__overlay');
+const cartItemsEl    = document.getElementById('cart-items');
+const cartCountEl    = document.getElementById('cart-count');
+const cartTotalEl    = document.getElementById('cart-total');
+const checkoutBtn    = document.getElementById('checkout-btn');
+const yearEl         = document.getElementById('year');
+
+let productCards = [];
+let cart = JSON.parse(localStorage.getItem('hl_cart') || '[]');
+let currentUser = null;
 
 /* =====================================================
    UTILIDADES
@@ -33,40 +36,100 @@ const showToast = (msg, type = 'success') => {
   toast.textContent = msg;
   toast.className = `toast toast--${type} toast--show`;
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => toast.classList.remove('toast--show'), 3000);
+  toast._t = setTimeout(() => toast.classList.remove('toast--show'), 3200);
 };
 
-/* =====================================================
-   AÑO DINÁMICO
-   ===================================================== */
 function setYear() {
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 }
 
 /* =====================================================
-   CARRITO — persistencia en localStorage
+   PRODUCTOS — carga dinámica desde Supabase
    ===================================================== */
-let cart = JSON.parse(localStorage.getItem('hl_cart') || '[]');
+async function loadProducts() {
+  const { data, error } = await db
+    .from('productos')
+    .select('*')
+    .order('created_at', { ascending: false });
 
+  if (error || !data?.length) {
+    /* Usa los productos hardcodeados del HTML como fallback */
+    productCards = Array.from(document.querySelectorAll('.producto'));
+    setupProductActions();
+    loadFavorites();
+    return;
+  }
+
+  /* Renderiza productos desde Supabase */
+  productsGrid.innerHTML = data.map((p) => `
+    <article
+      class="producto"
+      data-producto="${p.nombre}"
+      data-precio="${p.precio}"
+      data-categoria="${p.categoria || 'general'}"
+      data-id="${p.id}"
+    >
+      ${p.destacado ? '<div class="producto__badge">Nuevo</div>' : ''}
+      <img
+        src="${p.imagen_url || 'img/img/arroz.jpg'}"
+        alt="${p.nombre}"
+        loading="lazy"
+        decoding="async"
+        width="800" height="600"
+      />
+      <div class="producto__body">
+        <div class="producto__header">
+          <h3 class="producto__title">${p.nombre}</h3>
+          <button class="producto__fav" type="button" aria-label="Agregar a favoritos">
+            <i class="far fa-heart"></i>
+          </button>
+        </div>
+        <p class="producto__desc">${p.descripcion || ''}</p>
+        <div class="producto__footer">
+          <p class="precio" aria-label="Precio">
+            <span class="precio__currency">$</span>
+            <span class="precio__amount">${Number(p.precio).toFixed(0)}</span>
+          </p>
+          <div class="producto__actions">
+            <button class="btn btn--secondary" type="button" data-action="agregar-carrito" aria-label="Agregar al carrito">
+              <i class="fas fa-cart-plus"></i>
+            </button>
+            <button class="btn btn--primary" type="button" data-action="comprar">
+              <i class="fab fa-whatsapp"></i> Comprar
+            </button>
+          </div>
+        </div>
+      </div>
+    </article>`).join('');
+
+  productCards = Array.from(document.querySelectorAll('.producto'));
+  setupProductActions();
+  loadFavorites();
+}
+
+/* =====================================================
+   CARRITO — persistencia localStorage + Supabase
+   ===================================================== */
 function saveCart() {
   localStorage.setItem('hl_cart', JSON.stringify(cart));
 }
 
 function getProductData(card) {
   return {
+    id:    card.dataset.id || null,
     name:  card.dataset.producto || 'Producto',
     price: Number(card.dataset.precio || 0),
     img:   card.querySelector('img')?.src || '',
   };
 }
 
-function addToCart(name, price, img) {
+function addToCart(name, price, img, id = null) {
   const existing = cart.find((i) => i.name === name);
   if (existing) {
     existing.qty += 1;
     showToast(`+1 "${name}" en el carrito`);
   } else {
-    cart.push({ name, price, img, qty: 1 });
+    cart.push({ id, name, price, img, qty: 1 });
     showToast(`"${name}" agregado al carrito`);
   }
   saveCart();
@@ -147,7 +210,6 @@ function updateCartUI() {
   document.getElementById('clear-cart-btn')?.addEventListener('click', clearCart);
 }
 
-/* ── Abrir / cerrar carrito ── */
 const openCart  = () => { cartModal?.classList.add('is-open');    cartModal?.setAttribute('aria-hidden','false'); };
 const closeCart = () => { cartModal?.classList.remove('is-open'); cartModal?.setAttribute('aria-hidden','true'); };
 
@@ -158,7 +220,7 @@ function setupCartEvents() {
   checkoutBtn?.addEventListener('click', sendCartToWhatsApp);
 
   cartItemsEl?.addEventListener('click', (e) => {
-    const btn   = e.target.closest('button');
+    const btn = e.target.closest('button');
     if (!btn) return;
     const index = Number(btn.dataset.index);
     if (btn.classList.contains('remove-btn')) { removeFromCart(index); return; }
@@ -167,32 +229,45 @@ function setupCartEvents() {
 }
 
 /* =====================================================
-   WHATSAPP — mensaje con pedido completo
+   WHATSAPP + GUARDAR PEDIDO EN SUPABASE
    ===================================================== */
-function sendCartToWhatsApp() {
+async function sendCartToWhatsApp() {
   if (!cart.length) { showToast('Tu carrito está vacío', 'error'); return; }
 
-  const session = JSON.parse(localStorage.getItem('hl_session') || 'null');
-  const nombre  = session ? `Cliente: ${session.name}%0A` : '';
-  const total   = cart.reduce((a, i) => a + i.qty * i.price, 0);
-  const lines   = cart.map((i) => `• ${i.name} x${i.qty} = ${formatPrice(i.qty * i.price)}`);
+  const total = cart.reduce((a, i) => a + i.qty * i.price, 0);
+  const lines = cart.map((i) => `• ${i.name} x${i.qty} = ${formatPrice(i.qty * i.price)}`);
+
+  const nombreCliente = currentUser?.user_metadata?.name
+    ? `Cliente: ${currentUser.user_metadata.name}\n`
+    : '';
 
   const msg = [
     'Hola, H & L ALIMCERV 👋',
-    nombre ? decodeURIComponent(nombre.slice(0,-3)) : '',
+    nombreCliente,
     'Quiero realizar este pedido:',
     '',
     ...lines,
     '',
     `*Total: ${formatPrice(total)}*`,
-  ].filter(Boolean).join('%0A');
+  ].filter(Boolean).join('\n');
 
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(decodeURIComponent(msg))}`, '_blank');
+  /* Guardar pedido en Supabase si está logueado */
+  if (currentUser) {
+    const { error } = await db.from('pedidos').insert({
+      usuario_id: currentUser.id,
+      items: cart,
+      total,
+      estado: 'pendiente',
+    });
+    if (!error) showToast('Pedido guardado en tu historial ✓');
+  }
+
+  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 function directBuy(name, price) {
-  const msg = `Hola, quiero comprar:%0A• ${name} — ${formatPrice(price)}`;
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, '_blank');
+  const msg = `Hola, quiero comprar:\n• ${name} — ${formatPrice(price)}`;
+  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 /* =====================================================
@@ -206,10 +281,10 @@ function setupProductActions() {
     const card = e.target.closest('.producto');
     if (!card) return;
 
-    const { name, price, img } = getProductData(card);
+    const { id, name, price, img } = getProductData(card);
 
     if (btn?.dataset.action === 'agregar-carrito') {
-      addToCart(name, price, img);
+      addToCart(name, price, img, id);
       openCart();
       return;
     }
@@ -219,29 +294,22 @@ function setupProductActions() {
       return;
     }
 
-    /* Favoritos */
     if (btn?.classList.contains('producto__fav')) {
-      btn.classList.toggle('active');
-      const icon = btn.querySelector('i');
-      icon.classList.toggle('far');
-      icon.classList.toggle('fas');
-      showToast(btn.classList.contains('active') ? `"${name}" en favoritos ❤️` : `"${name}" eliminado de favoritos`);
-      saveFavorites();
+      toggleFavorite(card, btn);
       return;
     }
 
-    /* Click en imagen o título → modal de detalle */
     if (e.target.closest('img') || e.target.closest('.producto__title')) {
       openProductModal(card);
     }
   });
 }
 
-/* ── Modal de detalle de producto ── */
 function openProductModal(card) {
   const { name, price } = getProductData(card);
   const img  = card.querySelector('img')?.src || '';
   const desc = card.querySelector('.producto__desc')?.textContent || '';
+  const id   = card.dataset.id || null;
 
   let modal = document.getElementById('product-detail-modal');
   if (!modal) {
@@ -280,12 +348,12 @@ function openProductModal(card) {
   const close = () => { modal.classList.remove('is-open'); modal.setAttribute('aria-hidden','true'); };
   modal.querySelector('#pd-close').addEventListener('click', close);
   modal.querySelector('#pd-overlay').addEventListener('click', close);
-  modal.querySelector('.pd-add').addEventListener('click', () => { addToCart(name, price, img); close(); openCart(); });
+  modal.querySelector('.pd-add').addEventListener('click', () => { addToCart(name, price, img, id); close(); openCart(); });
   modal.querySelector('.pd-buy').addEventListener('click', () => { directBuy(name, price); close(); });
 }
 
 /* =====================================================
-   BUSCADOR — filtrado en tiempo real
+   BUSCADOR
    ===================================================== */
 function applySearch() {
   const term = (searchInput?.value || '').trim().toLowerCase();
@@ -300,17 +368,15 @@ function applySearch() {
     if (show) visible++;
   });
 
-  /* Mensaje si no hay resultados */
   let noResult = document.getElementById('no-results');
   if (!visible && term) {
     if (!noResult) {
       noResult = document.createElement('p');
       noResult.id = 'no-results';
       noResult.className = 'cart-empty';
-      noResult.innerHTML = `<i class="fas fa-search"></i> Sin resultados para "<strong>${term}</strong>"`;
       productsGrid?.after(noResult);
     }
-    noResult.querySelector('strong').textContent = term;
+    noResult.innerHTML = `<i class="fas fa-search"></i> Sin resultados para "<strong>${term}</strong>"`;
     noResult.style.display = '';
   } else if (noResult) {
     noResult.style.display = 'none';
@@ -320,8 +386,6 @@ function applySearch() {
 function setupSearch() {
   if (!searchInput) return;
   searchInput.addEventListener('input', applySearch);
-
-  /* Buscar al hacer submit del form */
   searchInput.closest('form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     applySearch();
@@ -330,31 +394,73 @@ function setupSearch() {
 }
 
 /* =====================================================
-   FAVORITOS — persistencia
+   FAVORITOS — sincronizados con Supabase
    ===================================================== */
-function saveFavorites() {
-  const favs = [];
-  productCards.forEach((card) => {
-    const btn = card.querySelector('.producto__fav');
-    if (btn?.classList.contains('active')) favs.push(card.dataset.producto);
-  });
+async function toggleFavorite(card, btn) {
+  const id   = card.dataset.id;
+  const name = card.dataset.producto;
+  const icon = btn.querySelector('i');
+  const isActive = btn.classList.contains('active');
+
+  btn.classList.toggle('active');
+  icon.classList.toggle('far', isActive);
+  icon.classList.toggle('fas', !isActive);
+
+  showToast(!isActive ? `"${name}" en favoritos ❤️` : `"${name}" eliminado de favoritos`);
+
+  if (!currentUser || !id) {
+    saveFavoritesLocal();
+    return;
+  }
+
+  if (!isActive) {
+    await db.from('favoritos').insert({ usuario_id: currentUser.id, producto_id: id });
+  } else {
+    await db.from('favoritos').delete()
+      .eq('usuario_id', currentUser.id)
+      .eq('producto_id', id);
+  }
+}
+
+function saveFavoritesLocal() {
+  const favs = productCards
+    .filter((c) => c.querySelector('.producto__fav')?.classList.contains('active'))
+    .map((c) => c.dataset.producto);
   localStorage.setItem('hl_favs', JSON.stringify(favs));
 }
 
-function loadFavorites() {
-  const favs = JSON.parse(localStorage.getItem('hl_favs') || '[]');
-  productCards.forEach((card) => {
-    if (favs.includes(card.dataset.producto)) {
-      const btn  = card.querySelector('.producto__fav');
-      const icon = btn?.querySelector('i');
-      btn?.classList.add('active');
-      icon?.classList.replace('far', 'fas');
-    }
-  });
+async function loadFavorites() {
+  if (currentUser) {
+    const { data } = await db
+      .from('favoritos')
+      .select('producto_id')
+      .eq('usuario_id', currentUser.id);
+
+    const favIds = (data || []).map((f) => f.producto_id);
+
+    productCards.forEach((card) => {
+      if (favIds.includes(card.dataset.id)) {
+        const btn  = card.querySelector('.producto__fav');
+        const icon = btn?.querySelector('i');
+        btn?.classList.add('active');
+        icon?.classList.replace('far', 'fas');
+      }
+    });
+  } else {
+    const favs = JSON.parse(localStorage.getItem('hl_favs') || '[]');
+    productCards.forEach((card) => {
+      if (favs.includes(card.dataset.producto)) {
+        const btn  = card.querySelector('.producto__fav');
+        const icon = btn?.querySelector('i');
+        btn?.classList.add('active');
+        icon?.classList.replace('far', 'fas');
+      }
+    });
+  }
 }
 
 /* =====================================================
-   AUTENTICACIÓN — localStorage
+   AUTENTICACIÓN — Supabase Auth
    ===================================================== */
 function setupAuthModals() {
   const loginModal    = document.getElementById('login-modal');
@@ -363,17 +469,15 @@ function setupAuthModals() {
   const openModal  = (m) => { m?.classList.add('is-open');    m?.setAttribute('aria-hidden','false'); };
   const closeModal = (m) => { m?.classList.remove('is-open'); m?.setAttribute('aria-hidden','true'); };
 
-  document.getElementById('btn-login')?.addEventListener('click',    () => openModal(loginModal));
-  document.getElementById('btn-register')?.addEventListener('click', () => openModal(registerModal));
-  document.getElementById('login-close')?.addEventListener('click',  () => closeModal(loginModal));
+  document.getElementById('login-close')?.addEventListener('click',    () => closeModal(loginModal));
   document.getElementById('register-close')?.addEventListener('click', () => closeModal(registerModal));
   document.getElementById('login-overlay')?.addEventListener('click',    () => closeModal(loginModal));
   document.getElementById('register-overlay')?.addEventListener('click', () => closeModal(registerModal));
   document.getElementById('go-register')?.addEventListener('click', () => { closeModal(loginModal); openModal(registerModal); });
   document.getElementById('go-login')?.addEventListener('click',    () => { closeModal(registerModal); openModal(loginModal); });
 
-  /* Registro */
-  document.getElementById('register-form')?.addEventListener('submit', (e) => {
+  /* ── Registro ── */
+  document.getElementById('register-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name     = document.getElementById('reg-name').value.trim();
     const email    = document.getElementById('reg-email').value.trim();
@@ -381,64 +485,94 @@ function setupAuthModals() {
 
     if (password.length < 6) { showToast('La contraseña debe tener al menos 6 caracteres', 'error'); return; }
 
-    const users = JSON.parse(localStorage.getItem('hl_users') || '[]');
-    if (users.find((u) => u.email === email)) { showToast('Este correo ya está registrado', 'error'); return; }
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Creando cuenta...';
 
-    users.push({ name, email, password });
-    localStorage.setItem('hl_users', JSON.stringify(users));
-    showToast(`¡Bienvenido, ${name}! Cuenta creada`);
+    const { data, error } = await db.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-user-plus"></i> Crear cuenta';
+
+    if (error) { showToast(error.message, 'error'); return; }
+
+    showToast(`¡Bienvenido, ${name}! Revisa tu correo para confirmar tu cuenta.`);
     closeModal(registerModal);
-    loginSession({ name, email });
+
+    if (data.user) {
+      currentUser = data.user;
+      renderUserMenu(data.user);
+    }
   });
 
-  /* Inicio de sesión */
-  document.getElementById('login-form')?.addEventListener('submit', (e) => {
+  /* ── Inicio de sesión ── */
+  document.getElementById('login-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email    = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
-    const users    = JSON.parse(localStorage.getItem('hl_users') || '[]');
-    const user     = users.find((u) => u.email === email && u.password === password);
 
-    if (!user) { showToast('Correo o contraseña incorrectos', 'error'); return; }
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Entrando...';
 
-    loginSession(user);
+    const { data, error } = await db.auth.signInWithPassword({ email, password });
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Entrar';
+
+    if (error) { showToast('Correo o contraseña incorrectos', 'error'); return; }
+
+    currentUser = data.user;
+    showToast(`¡Bienvenido de vuelta, ${data.user.user_metadata?.name || email}!`);
     closeModal(loginModal);
-    showToast(`¡Bienvenido de vuelta, ${user.name}!`);
+    renderUserMenu(data.user);
+    loadFavorites();
   });
 
-  /* Restaurar sesión */
-  const session = JSON.parse(localStorage.getItem('hl_session') || 'null');
-  if (session) renderUserMenu(session);
+  /* ── Escuchar cambios de sesión ── */
+  db.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session?.user) {
+      currentUser = session.user;
+      renderUserMenu(session.user);
+    }
+    if (event === 'SIGNED_OUT') {
+      currentUser = null;
+      document.getElementById('user-menu')?.remove();
+    }
+  });
+
+  /* ── Restaurar sesión activa ── */
+  db.auth.getUser().then(({ data }) => {
+    if (data?.user) {
+      currentUser = data.user;
+      renderUserMenu(data.user);
+    }
+  });
 }
 
-function loginSession(user) {
-  localStorage.setItem('hl_session', JSON.stringify(user));
-  renderUserMenu(user);
-}
-
-function logout() {
-  localStorage.removeItem('hl_session');
-  const userMenu = document.getElementById('user-menu');
-  if (userMenu) userMenu.remove();
+async function logout() {
+  await db.auth.signOut();
+  currentUser = null;
+  document.getElementById('user-menu')?.remove();
   showToast('Sesión cerrada');
 }
 
 function renderUserMenu(user) {
-  /* Ocultar botones de auth */
-  document.getElementById('btn-login')?.remove();
-  document.getElementById('btn-register')?.remove();
-
-  /* Crear menú de usuario si no existe */
   if (document.getElementById('user-menu')) return;
 
-  const nav = document.querySelector('.topbar__actions');
-  const menu = document.createElement('div');
-  menu.id = 'user-menu';
+  const name  = user.user_metadata?.name || user.email;
+  const nav   = document.querySelector('.topbar__actions');
+  const menu  = document.createElement('div');
+  menu.id     = 'user-menu';
   menu.className = 'user-menu';
   menu.innerHTML = `
     <button class="user-menu__btn" type="button">
       <i class="fas fa-user-circle"></i>
-      <span>${user.name.split(' ')[0]}</span>
+      <span>${name.split(' ')[0]}</span>
       <i class="fas fa-chevron-down" style="font-size:0.7rem"></i>
     </button>
     <div class="user-menu__dropdown">
@@ -448,7 +582,7 @@ function renderUserMenu(user) {
       </button>
     </div>`;
 
-  nav.insertBefore(menu, nav.firstChild);
+  nav?.insertBefore(menu, nav.firstChild);
 
   menu.querySelector('.user-menu__btn').addEventListener('click', () => {
     menu.classList.toggle('is-open');
@@ -513,15 +647,14 @@ function setupFilters() {
 /* =====================================================
    INIT
    ===================================================== */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   setYear();
   updateCartUI();
-  loadFavorites();
   setupCartEvents();
-  setupProductActions();
   setupSearch();
   setupDrawer();
-  setupAuthModals();
   setupFilters();
+  setupAuthModals();
+  await loadProducts();
   applySearch();
 });
