@@ -476,14 +476,20 @@ function setupDrawer() {
   overlay?.addEventListener('click', close);
   drawer?.querySelectorAll('.drawer__link').forEach((link) => link.addEventListener('click', close));
 
-  document.getElementById('drawer-login-btn')?.addEventListener('click', () => {
+  document.getElementById('drawer-login-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     close();
-    setTimeout(() => document.getElementById('btn-login')?.click(), 250);
+    const m = document.getElementById('login-modal');
+    m?.classList.add('is-open');
+    m?.setAttribute('aria-hidden', 'false');
   });
 
-  document.getElementById('drawer-register-btn')?.addEventListener('click', () => {
+  document.getElementById('drawer-register-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     close();
-    setTimeout(() => document.getElementById('btn-register')?.click(), 250);
+    const m = document.getElementById('register-modal');
+    m?.classList.add('is-open');
+    m?.setAttribute('aria-hidden', 'false');
   });
 }
 
