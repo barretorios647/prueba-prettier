@@ -1496,6 +1496,107 @@ button { font-family: inherit; cursor: pointer; }
 .user-menu__item:hover { background: rgba(224,82,82,0.07); }
 
 /* =====================================================
+   VERIFICACIÓN DE CÓDIGO
+   ===================================================== */
+.verify-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.verify-box__icon {
+  width: 70px; height: 70px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(201,168,76,0.15), rgba(201,168,76,0.05));
+  border: 2px solid var(--gold-border-strong);
+  display: grid; place-items: center;
+  font-size: 1.8rem;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
+
+.verify-box__title {
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.verify-box__desc {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.verify-box__email {
+  font-weight: 700;
+  color: var(--gold-dark);
+}
+
+.verify-box .auth-form {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.verify-code-wrapper input {
+  font-size: 1.4rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.verify-back {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: var(--text-muted) !important;
+}
+
+.verify-back:hover { color: var(--gold-dark) !important; }
+
+/* Steps indicator */
+.register-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 24px 16px;
+}
+
+.register-step {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 0.75rem; font-weight: 800;
+  border: 2px solid var(--gold-border);
+  color: var(--text-muted);
+  background: transparent;
+  transition: all var(--transition);
+}
+
+.register-step.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #000;
+}
+
+.register-step.done {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.register-step-line {
+  flex: 1; height: 2px;
+  background: var(--gold-border);
+  border-radius: 2px;
+  max-width: 40px;
+}
+
+/* =====================================================
    PANEL ADMINISTRACIÓN
    ===================================================== */
 .admin-modal.is-open {

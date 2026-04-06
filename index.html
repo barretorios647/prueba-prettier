@@ -435,12 +435,23 @@
       <div class="modal__overlay" id="register-overlay"></div>
       <div class="modal__content">
         <div class="modal__header">
-          <h2 class="modal__title"><i class="fas fa-user-plus"></i> Crear Cuenta</h2>
+          <h2 class="modal__title" id="register-modal-title">
+            <i class="fas fa-user-plus"></i> Crear Cuenta
+          </h2>
           <button class="modal__close" id="register-close" type="button" aria-label="Cerrar">
             <i class="fas fa-times"></i>
           </button>
         </div>
-        <div class="modal__body">
+
+        <!-- Indicador de pasos -->
+        <div class="register-steps">
+          <div class="register-step active" id="step-dot-1">1</div>
+          <div class="register-step-line"></div>
+          <div class="register-step" id="step-dot-2">2</div>
+        </div>
+
+        <!-- Paso 1: Datos del usuario -->
+        <div class="modal__body" id="register-step-1">
           <form class="auth-form" id="register-form">
             <div class="auth-form__group">
               <label class="auth-form__label" for="reg-name">Nombre completo</label>
@@ -463,8 +474,8 @@
                 <input id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password" required />
               </div>
             </div>
-            <button class="btn btn--gold btn--block" type="submit">
-              <i class="fas fa-user-plus"></i> Crear cuenta
+            <button class="btn btn--gold btn--block" type="submit" id="reg-submit-btn">
+              <i class="fas fa-paper-plane"></i> Enviar código de verificación
             </button>
             <p class="auth-form__switch">
               ¿Ya tienes cuenta?
@@ -472,6 +483,46 @@
             </p>
           </form>
         </div>
+
+        <!-- Paso 2: Código de verificación -->
+        <div class="modal__body" id="register-step-2" style="display:none;">
+          <div class="verify-box">
+            <div class="verify-box__icon"><i class="fas fa-envelope-open-text"></i></div>
+            <h3 class="verify-box__title">Revisa tu correo</h3>
+            <p class="verify-box__desc">
+              Enviamos un código de <strong>6 dígitos</strong> a<br/>
+              <span id="verify-email-display" class="verify-box__email"></span>
+            </p>
+            <form class="auth-form" id="verify-form">
+              <div class="auth-form__group">
+                <label class="auth-form__label" for="verify-code">Código de verificación</label>
+                <div class="auth-form__input-wrapper verify-code-wrapper">
+                  <i class="fas fa-key"></i>
+                  <input
+                    id="verify-code"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="6"
+                    placeholder="000000"
+                    autocomplete="one-time-code"
+                    required
+                  />
+                </div>
+              </div>
+              <button class="btn btn--gold btn--block" type="submit" id="verify-submit-btn">
+                <i class="fas fa-check-circle"></i> Verificar cuenta
+              </button>
+              <p class="auth-form__switch">
+                ¿No recibiste el código?
+                <button type="button" class="auth-link" id="resend-code-btn">Reenviar</button>
+              </p>
+              <button type="button" class="auth-link verify-back" id="back-to-register">
+                <i class="fas fa-arrow-left"></i> Volver
+              </button>
+            </form>
+          </div>
+        </div>
+
       </div>
     </div>
 

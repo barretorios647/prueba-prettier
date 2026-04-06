@@ -470,13 +470,29 @@ function setupAuthModals() {
   const closeModal = (m) => { m?.classList.remove('is-open'); m?.setAttribute('aria-hidden','true'); };
 
   document.getElementById('login-close')?.addEventListener('click',    () => closeModal(loginModal));
-  document.getElementById('register-close')?.addEventListener('click', () => closeModal(registerModal));
+  document.getElementById('register-close')?.addEventListener('click', () => {
+    closeModal(registerModal);
+    goToStep(1);
+    document.getElementById('verify-code').value = '';
+  });
   document.getElementById('login-overlay')?.addEventListener('click',    () => closeModal(loginModal));
   document.getElementById('register-overlay')?.addEventListener('click', () => closeModal(registerModal));
   document.getElementById('go-register')?.addEventListener('click', () => { closeModal(loginModal); openModal(registerModal); });
   document.getElementById('go-login')?.addEventListener('click',    () => { closeModal(registerModal); openModal(loginModal); });
 
-  /* ── Registro ── */
+  /* ── Registro Paso 1: enviar código ── */
+  let pendingRegister = {};
+
+  const goToStep = (step) => {
+    document.getElementById('register-step-1').style.display = step === 1 ? '' : 'none';
+    document.getElementById('register-step-2').style.display = step === 2 ? '' : 'none';
+    document.getElementById('step-dot-1').className = `register-step ${step === 1 ? 'active' : 'done'}`;
+    document.getElementById('step-dot-2').className = `register-step ${step === 2 ? 'active' : ''}`;
+    document.getElementById('register-modal-title').innerHTML = step === 1
+      ? '<i class="fas fa-user-plus"></i> Crear Cuenta'
+      : '<i class="fas fa-shield-check"></i> Verificar Cuenta';
+  };
+
   document.getElementById('register-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name     = document.getElementById('reg-name').value.trim();
@@ -485,28 +501,74 @@ function setupAuthModals() {
 
     if (password.length < 6) { showToast('La contraseña debe tener al menos 6 caracteres', 'error'); return; }
 
-    const btn = e.target.querySelector('button[type="submit"]');
+    const btn = document.getElementById('reg-submit-btn');
     btn.disabled = true;
-    btn.textContent = 'Creando cuenta...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando código...';
 
-    const { data, error } = await db.auth.signUp({
+    const { error } = await db.auth.signUp({
       email,
       password,
       options: { data: { name } },
     });
 
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-user-plus"></i> Crear cuenta';
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar código de verificación';
 
     if (error) { showToast(error.message, 'error'); return; }
 
-    showToast(`¡Bienvenido, ${name}! Revisa tu correo para confirmar tu cuenta.`);
+    pendingRegister = { name, email, password };
+    document.getElementById('verify-email-display').textContent = email;
+    showToast(`Código enviado a ${email} 📧`);
+    goToStep(2);
+  });
+
+  /* ── Registro Paso 2: verificar código ── */
+  document.getElementById('verify-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = document.getElementById('verify-code').value.trim();
+
+    if (code.length !== 6) { showToast('Ingresa los 6 dígitos del código', 'error'); return; }
+
+    const btn = document.getElementById('verify-submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
+
+    const { data, error } = await db.auth.verifyOtp({
+      email: pendingRegister.email,
+      token: code,
+      type: 'signup',
+    });
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check-circle"></i> Verificar cuenta';
+
+    if (error) { showToast('Código incorrecto o expirado', 'error'); return; }
+
+    showToast(`¡Bienvenido, ${pendingRegister.name}! Cuenta verificada ✅`);
     closeModal(registerModal);
+    goToStep(1);
+    document.getElementById('verify-code').value = '';
 
     if (data.user) {
       currentUser = data.user;
       renderUserMenu(data.user);
+      checkAdmin(data.user).then(showAdminBtn);
+      loadFavorites();
     }
+  });
+
+  /* ── Reenviar código ── */
+  document.getElementById('resend-code-btn')?.addEventListener('click', async () => {
+    if (!pendingRegister.email) return;
+    const { error } = await db.auth.resend({ type: 'signup', email: pendingRegister.email });
+    if (error) { showToast(error.message, 'error'); return; }
+    showToast(`Código reenviado a ${pendingRegister.email} 📧`);
+  });
+
+  /* ── Volver al paso 1 ── */
+  document.getElementById('back-to-register')?.addEventListener('click', () => {
+    goToStep(1);
+    document.getElementById('verify-code').value = '';
   });
 
   /* ── Inicio de sesión ── */
