@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>H &amp; L ALIMCERV Group | Alimentos &amp; Bebidas</title>
+    <meta
+      name="description"
+      content="H & L ALIMCERV Group. Alimentos, bebidas y productos esenciales de calidad. Pide por WhatsApp de forma rápida y segura."
+    />
+    <meta name="theme-color" content="#0a0a0a" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;900&family=Montserrat:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="preconnect" href="https://wa.me" />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="manifest" href="site.webmanifest" />
+
+    <meta property="og:title" content="H &amp; L ALIMCERV Group" />
+    <meta
+      property="og:description"
+      content="Alimentos, bebidas y productos esenciales. Pide por WhatsApp."
+    />
+    <meta property="og:type" content="website" />
+
+    <link rel="icon" href="favicon.ico" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+    <header class="topbar">
+      <div class="container topbar__inner">
+        <div class="brand">
+          <div class="brand__text">
+            <span class="brand__name">H &amp; L ALIMCERV</span>
+            <span class="brand__tag">Group &nbsp;·&nbsp; ESTD 2026</span>
+          </div>
+        </div>
+
+        <nav class="topbar__actions" aria-label="Acciones principales">
+          <button class="cart-btn" id="open-cart" type="button" aria-label="Ver carrito">
+            <i class="fas fa-shopping-cart"></i>
+            <span class="cart-badge" id="cart-count">0</span>
+          </button>
+          <button class="hamburger-btn" id="open-menu" type="button" aria-label="Abrir menú">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <section class="hero" role="banner">
+      <div class="hero__overlay"></div>
+
+      <div class="container hero__inner">
+        <h2 class="hero__search-title">¿Qué estás buscando hoy?</h2>
+        <div class="hero__search-row">
+          <img class="hero__logo" src="img/img/logo.png.jpeg" alt="H &amp; L ALIMCERV Group" />
+          <form class="hero__search-form" role="search" aria-label="Buscar productos">
+            <label class="sr-only" for="q">Buscar</label>
+            <div class="hero__search-wrapper">
+              <i class="fas fa-search"></i>
+              <input
+                id="q"
+                name="q"
+                type="search"
+                inputmode="search"
+                autocomplete="off"
+                placeholder="Buscar productos, alimentos, bebidas..."
+              />
+              <button type="submit" class="hero__search-btn">Buscar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <main id="contenido" class="main-layout">
+      <section class="content-area">
+        <div class="container">
+
+          <section class="section" id="productos-section" aria-labelledby="titulo-productos">
+            <div class="section__head">
+              <div>
+                <p class="section__eyebrow">Catálogo principal</p>
+                <h2 id="titulo-productos"><i class="fas fa-store"></i> Nuestros Productos</h2>
+              </div>
+
+            </div>
+
+            <div class="grid" id="productos" aria-live="polite">
+              <article
+                class="producto"
+                data-producto="Arroz Premium"
+                data-precio="50"
+                data-categoria="alimentos"
+              >
+                <div class="producto__badge">Nuevo</div>
+                <img
+                  src="img/arroz.jpg"
+                  alt="Bolsa de arroz"
+                  loading="lazy"
+                  decoding="async"
+                  width="800"
+                  height="600"
+                />
+                <div class="producto__body">
+                  <div class="producto__header">
+                    <h3 class="producto__title">Arroz Premium</h3>
+                    <button class="producto__fav" type="button" aria-label="Agregar a favoritos">
+                      <i class="far fa-heart"></i>
+                    </button>
+                  </div>
+
+                  <p class="producto__desc">Arroz de grano largo, ideal para todas tus comidas</p>
+
+                  <div class="producto__footer">
+                    <p class="precio" aria-label="Precio">
+                      <span class="precio__currency">$</span>
+                      <span class="precio__amount">50</span>
+                      <span class="precio__unit">/kg</span>
+                    </p>
+
+                    <div class="producto__actions">
+                      <button
+                        class="btn btn--secondary"
+                        type="button"
+                        data-action="agregar-carrito"
+                        aria-label="Agregar al carrito"
+                      >
+                        <i class="fas fa-cart-plus"></i>
+                      </button>
+
+                      <button class="btn btn--primary" type="button" data-action="comprar">
+                        <i class="fab fa-whatsapp"></i>
+                        Comprar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article
+                class="producto"
+                data-producto="Refresco Cola 2L"
+                data-precio="30"
+                data-categoria="bebidas"
+              >
+                <div class="producto__badge producto__badge--sale">Oferta</div>
+                <img
+                  src="img/refresco.jpg"
+                  alt="Botella de refresco"
+                  loading="lazy"
+                  decoding="async"
+                  width="800"
+                  height="600"
+                />
+                <div class="producto__body">
+                  <div class="producto__header">
+                    <h3 class="producto__title">Refresco Cola</h3>
+                    <button class="producto__fav" type="button" aria-label="Agregar a favoritos">
+                      <i class="far fa-heart"></i>
+                    </button>
+                  </div>
+
+                  <p class="producto__desc">Refresco de cola 2L, perfecto para compartir</p>
+
+                  <div class="producto__footer">
+                    <p class="precio" aria-label="Precio">
+                      <span class="precio__old">$35</span>
+                      <span class="precio__currency">$</span>
+                      <span class="precio__amount">30</span>
+                    </p>
+
+                    <div class="producto__actions">
+                      <button
+                        class="btn btn--secondary"
+                        type="button"
+                        data-action="agregar-carrito"
+                        aria-label="Agregar al carrito"
+                      >
+                        <i class="fas fa-cart-plus"></i>
+                      </button>
+
+                      <button class="btn btn--primary" type="button" data-action="comprar">
+                        <i class="fab fa-whatsapp"></i>
+                        Comprar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article
+                class="producto"
+                data-producto="Aceite Vegetal 1L"
+                data-precio="80"
+                data-categoria="aceites"
+              >
+                <img
+                  src="img/aceite.jpg"
+                  alt="Botella de aceite"
+                  loading="lazy"
+                  decoding="async"
+                  width="800"
+                  height="600"
+                />
+                <div class="producto__body">
+                  <div class="producto__header">
+                    <h3 class="producto__title">Aceite Vegetal</h3>
+                    <button class="producto__fav" type="button" aria-label="Agregar a favoritos">
+                      <i class="far fa-heart"></i>
+                    </button>
+                  </div>
+
+                  <p class="producto__desc">Aceite vegetal 100% puro, botella de 1 litro</p>
+
+                  <div class="producto__footer">
+                    <p class="precio" aria-label="Precio">
+                      <span class="precio__currency">$</span>
+                      <span class="precio__amount">80</span>
+                      <span class="precio__unit">/L</span>
+                    </p>
+
+                    <div class="producto__actions">
+                      <button
+                        class="btn btn--secondary"
+                        type="button"
+                        data-action="agregar-carrito"
+                        aria-label="Agregar al carrito"
+                      >
+                        <i class="fas fa-cart-plus"></i>
+                      </button>
+
+                      <button class="btn btn--primary" type="button" data-action="comprar">
+                        <i class="fab fa-whatsapp"></i>
+                        Comprar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="benefits" id="beneficios">
+<div class="benefit-card">
+              <i class="fas fa-shield-alt benefit-card__icon"></i>
+              <h3 class="benefit-card__title">Compra Segura</h3>
+              <p class="benefit-card__text">Tus datos están protegidos siempre</p>
+            </div>
+
+            <div class="benefit-card">
+              <i class="fas fa-headset benefit-card__icon"></i>
+              <h3 class="benefit-card__title">Soporte 24/7</h3>
+              <p class="benefit-card__text">Estamos aquí para ayudarte</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="footer" role="contentinfo" id="contacto">
+      <div class="footer__ornament" aria-hidden="true">
+        <span class="ornament-line"></span>
+        <i class="fas fa-star"></i>
+        <span class="ornament-line"></span>
+      </div>
+
+      <div class="container footer__content">
+        <div class="footer__section">
+          <h3 class="footer__title">H &amp; L ALIMCERV</h3>
+          <p class="footer__text footer__text--sub">Group · ESTD 2025</p>
+          <p class="footer__text">Tu proveedor de confianza en alimentos y bebidas de calidad.</p>
+
+          <div class="footer__social">
+            <a href="#" class="social-link" aria-label="Facebook">
+              <i class="fab fa-facebook"></i>
+            </a>
+            <a href="#" class="social-link" aria-label="Instagram">
+              <i class="fab fa-instagram"></i>
+            </a>
+            <a
+              href="https://wa.me/529621643422"
+              target="_blank"
+              rel="noopener"
+              class="social-link"
+              aria-label="WhatsApp"
+            >
+              <i class="fab fa-whatsapp"></i>
+            </a>
+          </div>
+        </div>
+
+        <div class="footer__section">
+          <h4 class="footer__subtitle">Contacto</h4>
+          <p class="footer__text"><i class="fas fa-phone"></i> +52 962 164 3422</p>
+          <p class="footer__text"><i class="fas fa-envelope"></i> info@hlalimcerv.com</p>
+        </div>
+
+        <div class="footer__section">
+          <h4 class="footer__subtitle">Horario</h4>
+          <p class="footer__text"><i class="fas fa-clock"></i> Lunes — Domingo</p>
+          <p class="footer__text"><i class="fas fa-sun"></i> 8:00 AM – 10:00 PM</p>
+        </div>
+      </div>
+
+      <div class="footer__bottom">
+        <p class="footer__copyright">
+          © <span id="year"></span> H &amp; L ALIMCERV Group. Todos los derechos reservados.
+        </p>
+      </div>
+    </footer>
+
+    <div class="modal" id="cart-modal" aria-hidden="true">
+      <div class="modal__overlay"></div>
+
+      <div class="modal__content">
+        <div class="modal__header">
+          <h2 class="modal__title">
+            <i class="fas fa-shopping-cart"></i>
+            Tu Carrito
+          </h2>
+
+          <button class="modal__close" type="button" aria-label="Cerrar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="modal__body" id="cart-items">
+          <p class="cart-empty">
+            <i class="fas fa-shopping-basket"></i>
+            Tu carrito está vacío
+          </p>
+        </div>
+
+        <div class="modal__footer">
+          <div class="cart-total">
+            <span>Total:</span>
+            <span class="cart-total__amount" id="cart-total">$0</span>
+          </div>
+
+          <button class="btn btn--primary btn--block" type="button" id="checkout-btn">
+            <i class="fab fa-whatsapp"></i>
+            Ordenar por WhatsApp
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Menú lateral -->
+    <div class="drawer" id="drawer" aria-hidden="true">
+      <div class="drawer__overlay" id="drawer-overlay"></div>
+      <div class="drawer__panel">
+        <div class="drawer__header">
+          <span class="drawer__title">Menú</span>
+          <button class="drawer__close" id="close-menu" type="button" aria-label="Cerrar menú">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <nav class="drawer__nav">
+          <a class="drawer__link" href="#productos-section"><i class="fas fa-store"></i> Productos</a>
+          <a class="drawer__link" href="#beneficios"><i class="fas fa-shield-alt"></i> Beneficios</a>
+          <a class="drawer__link" href="#contacto"><i class="fas fa-phone"></i> Contacto</a>
+          <a class="drawer__link" href="https://wa.me/529621643422" target="_blank" rel="noopener">
+            <i class="fab fa-whatsapp"></i> WhatsApp
+          </a>
+        </nav>
+
+        <div class="drawer__auth">
+          <button class="drawer__auth-btn drawer__auth-btn--login" id="drawer-login-btn" type="button">
+            <i class="fas fa-sign-in-alt"></i> Iniciar sesión
+          </button>
+          <button class="drawer__auth-btn drawer__auth-btn--register" id="drawer-register-btn" type="button">
+            <i class="fas fa-user-plus"></i> Registrarse
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Iniciar Sesión -->
+    <div class="modal" id="login-modal" aria-hidden="true">
+      <div class="modal__overlay" id="login-overlay"></div>
+      <div class="modal__content">
+        <div class="modal__header">
+          <h2 class="modal__title"><i class="fas fa-user"></i> Iniciar Sesión</h2>
+          <button class="modal__close" id="login-close" type="button" aria-label="Cerrar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal__body">
+          <form class="auth-form" id="login-form">
+            <div class="auth-form__group">
+              <label class="auth-form__label" for="login-email">Correo electrónico</label>
+              <div class="auth-form__input-wrapper">
+                <i class="fas fa-envelope"></i>
+                <input id="login-email" type="email" placeholder="correo@ejemplo.com" autocomplete="email" required />
+              </div>
+            </div>
+            <div class="auth-form__group">
+              <label class="auth-form__label" for="login-password">Contraseña</label>
+              <div class="auth-form__input-wrapper">
+                <i class="fas fa-lock"></i>
+                <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+              </div>
+            </div>
+            <button class="btn btn--gold btn--block" type="submit">
+              <i class="fas fa-sign-in-alt"></i> Entrar
+            </button>
+            <p class="auth-form__switch">
+              ¿No tienes cuenta?
+              <button type="button" class="auth-link" id="go-register">Regístrate aquí</button>
+            </p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Registrarse -->
+    <div class="modal" id="register-modal" aria-hidden="true">
+      <div class="modal__overlay" id="register-overlay"></div>
+      <div class="modal__content">
+        <div class="modal__header">
+          <h2 class="modal__title"><i class="fas fa-user-plus"></i> Crear Cuenta</h2>
+          <button class="modal__close" id="register-close" type="button" aria-label="Cerrar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal__body">
+          <form class="auth-form" id="register-form">
+            <div class="auth-form__group">
+              <label class="auth-form__label" for="reg-name">Nombre completo</label>
+              <div class="auth-form__input-wrapper">
+                <i class="fas fa-user"></i>
+                <input id="reg-name" type="text" placeholder="Tu nombre" autocomplete="name" required />
+              </div>
+            </div>
+            <div class="auth-form__group">
+              <label class="auth-form__label" for="reg-email">Correo electrónico</label>
+              <div class="auth-form__input-wrapper">
+                <i class="fas fa-envelope"></i>
+                <input id="reg-email" type="email" placeholder="correo@ejemplo.com" autocomplete="email" required />
+              </div>
+            </div>
+            <div class="auth-form__group">
+              <label class="auth-form__label" for="reg-password">Contraseña</label>
+              <div class="auth-form__input-wrapper">
+                <i class="fas fa-lock"></i>
+                <input id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password" required />
+              </div>
+            </div>
+            <button class="btn btn--gold btn--block" type="submit">
+              <i class="fas fa-user-plus"></i> Crear cuenta
+            </button>
+            <p class="auth-form__switch">
+              ¿Ya tienes cuenta?
+              <button type="button" class="auth-link" id="go-login">Inicia sesión</button>
+            </p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
