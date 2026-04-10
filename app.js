@@ -1,927 +1,1028 @@
 /* =====================================================
-   H & L ALIMCERV — App con Supabase
+   H & L ALIMCERV Group — Frontend App
+   PHP + MySQL backend (InfinityFree)
    ===================================================== */
 
-const WHATSAPP_NUMBER = '529621643422';
+'use strict';
 
-/* ── Elementos del DOM ── */
-const productsGrid   = document.getElementById('productos');
-const searchInput    = document.getElementById('q');
-const cartModal      = document.getElementById('cart-modal');
-const openCartBtn    = document.getElementById('open-cart');
-const cartCloseBtn   = document.querySelector('.modal__close');
-const cartOverlay    = document.querySelector('.modal__overlay');
-const cartItemsEl    = document.getElementById('cart-items');
-const cartCountEl    = document.getElementById('cart-count');
-const cartTotalEl    = document.getElementById('cart-total');
-const checkoutBtn    = document.getElementById('checkout-btn');
-const yearEl         = document.getElementById('year');
-
-let productCards = [];
-let cart = JSON.parse(localStorage.getItem('hl_cart') || '[]');
-let currentUser = null;
-
-/* =====================================================
-   UTILIDADES
-   ===================================================== */
-const formatPrice = (v) => `$${Number(v).toFixed(2)}`;
-
-const showToast = (msg, type = 'success') => {
-  let toast = document.getElementById('toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'toast';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = msg;
-  toast.className = `toast toast--${type} toast--show`;
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => toast.classList.remove('toast--show'), 3200);
+// ── Constantes ────────────────────────────────────────
+const WA_NUMBER = '529621643422';
+const API = {
+  auth:     'api/auth.php',
+  products: 'api/products.php',
+  orders:   'api/orders.php',
+  admin:    'api/admin.php',
+  upload:   'api/upload.php',
 };
 
-function setYear() {
-  if (yearEl) yearEl.textContent = new Date().getFullYear();
+// ── Estado global ─────────────────────────────────────
+const state = {
+  user:     window.__INITIAL_USER__ || null,
+  cart:     JSON.parse(localStorage.getItem('hl_cart') || '[]'),
+  products: [],
+  filter:   { category: 'todos', q: '', sort: 'default' },
+  adminData:{ users: [], orders: [], activity: [] },
+  otpPhone: '',
+  otpTimer: null,
+};
+
+// ══════════════════════════════════════════
+//  UTILIDADES
+// ══════════════════════════════════════════
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options,
+    body: options.body && typeof options.body === 'object'
+      ? JSON.stringify(options.body)
+      : options.body,
+  });
+  const data = await res.json();
+  if (!res.ok && data.error) throw new Error(data.error);
+  return data;
 }
 
-/* =====================================================
-   PRODUCTOS — carga dinámica desde Supabase
-   ===================================================== */
-async function loadProducts() {
-  const { data, error } = await db
-    .from('productos')
-    .select('*')
-    .order('created_at', { ascending: false });
+function toast(msg, type = 'info', duration = 3500) {
+  const icons = { success: 'fa-check-circle', error: 'fa-exclamation-circle',
+                  info: 'fa-info-circle', warning: 'fa-exclamation-triangle' };
+  const el = document.createElement('div');
+  el.className = `toast toast--${type}`;
+  el.innerHTML = `<i class="fas ${icons[type]} toast__icon"></i><span class="toast__msg">${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => { el.classList.add('removing'); setTimeout(() => el.remove(), 300); }, duration);
+}
 
-  if (error || !data?.length) {
-    /* Usa los productos hardcodeados del HTML como fallback */
-    productCards = Array.from(document.querySelectorAll('.producto'));
-    setupProductActions();
-    loadFavorites();
-    return;
+function fmt(n) { return '$' + Number(n).toFixed(2); }
+function fmtDate(d) {
+  return new Date(d).toLocaleString('es-MX', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setLoading(btn, loading) {
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.dataset.origText = btn.dataset.origText || btn.innerHTML;
+  btn.innerHTML = loading
+    ? '<i class="fas fa-spinner fa-spin"></i> Espera...'
+    : btn.dataset.origText;
+}
+
+// ══════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════
+
+function updateAuthUI() {
+  const { user } = state;
+  const isAdmin = user && user.role === 'admin';
+
+  // Topbar
+  const userMenu   = document.getElementById('user-menu');
+  const authBtns   = document.getElementById('auth-btns');
+  const userNameEl = document.getElementById('topbar-user-name');
+  const ddHeader   = document.getElementById('user-dropdown-header');
+
+  if (user) {
+    userMenu.style.display = 'flex';
+    authBtns.style.display = 'none';
+    userNameEl.textContent = user.name.split(' ')[0];
+    ddHeader.innerHTML = `<strong>${escHtml(user.name)}</strong><br><small style="color:var(--text-muted)">${escHtml(user.phone)}</small>`;
+
+    // Drawer
+    document.getElementById('drawer-user').style.display = 'flex';
+    document.getElementById('drawer-auth').style.display = 'none';
+    document.getElementById('drawer-auth-logged').style.display = 'flex';
+    document.getElementById('drawer-user-name').textContent = user.name;
+    document.getElementById('drawer-user-phone').textContent = user.phone;
+    document.getElementById('drawer-orders-btn').style.display = 'flex';
+
+    if (isAdmin) {
+      document.getElementById('drawer-admin-btn').style.display = 'flex';
+      document.getElementById('dd-admin') && (document.getElementById('dd-admin').style.display = 'flex');
+    }
+  } else {
+    userMenu.style.display = 'none';
+    authBtns.style.display = 'flex';
+    document.getElementById('drawer-user').style.display = 'none';
+    document.getElementById('drawer-auth').style.display = 'flex';
+    document.getElementById('drawer-auth-logged').style.display = 'none';
+    document.getElementById('drawer-orders-btn').style.display = 'none';
+    document.getElementById('drawer-admin-btn').style.display = 'none';
   }
+}
 
-  /* Renderiza productos desde Supabase */
-  productsGrid.innerHTML = data.map((p) => `
-    <article
-      class="producto"
-      data-producto="${p.nombre}"
-      data-precio="${p.precio}"
-      data-categoria="${p.categoria || 'general'}"
-      data-id="${p.id}"
-    >
-      ${p.destacado ? '<div class="producto__badge">Nuevo</div>' : ''}
-      <img
-        src="${p.imagen_url || 'img/img/arroz.jpg'}"
-        alt="${p.nombre}"
-        loading="lazy"
-        decoding="async"
-        width="800" height="600"
-      />
+async function doLogin(phone, password) {
+  const btn = document.getElementById('login-submit');
+  const err = document.getElementById('login-error');
+  setLoading(btn, true); err.textContent = '';
+  try {
+    const { user } = await apiFetch(`${API.auth}?action=login`, { method: 'POST', body: { phone, password } });
+    state.user = user;
+    updateAuthUI();
+    closeAllModals();
+    toast(`¡Bienvenido, ${user.name.split(' ')[0]}!`, 'success');
+    if (user.role === 'admin') loadAdminDashboard();
+  } catch (e) { err.textContent = e.message; }
+  finally { setLoading(btn, false); }
+}
+
+async function doRegister(name, phone, password) {
+  const btn = document.getElementById('register-submit');
+  const err = document.getElementById('register-error');
+  setLoading(btn, true); err.textContent = '';
+  try {
+    const data = await apiFetch(`${API.auth}?action=register`, { method: 'POST', body: { name, phone, password } });
+    state.otpPhone = phone;
+
+    // Paso 2: OTP
+    document.getElementById('register-step-1').style.display = 'none';
+    document.getElementById('register-step-2').style.display = 'block';
+    document.getElementById('verify-phone-display').textContent = phone;
+    document.getElementById('step-dot-1').classList.remove('step-dot--active');
+    document.getElementById('step-dot-1').classList.add('step-dot--done');
+    document.getElementById('step-dot-2').classList.add('step-dot--active');
+    document.querySelector('.step-dot-1 span') && (document.getElementById('step-dot-1').querySelector('span').innerHTML = '<i class="fas fa-check"></i>');
+
+    if (data.demo_code) {
+      document.getElementById('otp-demo-alert').style.display = 'flex';
+      document.getElementById('otp-demo-code').textContent = data.demo_code;
+    }
+    startOtpTimer();
+    document.querySelectorAll('.otp-digit')[0]?.focus();
+  } catch (e) { err.textContent = e.message; }
+  finally { setLoading(btn, false); }
+}
+
+async function doVerifyOtp(code) {
+  const btn = document.getElementById('verify-submit');
+  const err = document.getElementById('verify-error');
+  setLoading(btn, true); err.textContent = '';
+  try {
+    const { user } = await apiFetch(`${API.auth}?action=verify_otp`, {
+      method: 'POST', body: { phone: state.otpPhone, code },
+    });
+    state.user = user;
+    updateAuthUI();
+    closeAllModals();
+    toast('¡Cuenta verificada! Bienvenido.', 'success');
+  } catch (e) { err.textContent = e.message; }
+  finally { setLoading(btn, false); }
+}
+
+async function doLogout() {
+  await apiFetch(`${API.auth}?action=logout`, { method: 'POST' }).catch(() => {});
+  state.user = null;
+  updateAuthUI();
+  closeAdmin();
+  toast('Sesión cerrada.', 'info');
+}
+
+function startOtpTimer() {
+  if (state.otpTimer) clearInterval(state.otpTimer);
+  let seconds = 60;
+  const timerEl    = document.getElementById('otp-timer');
+  const countEl    = document.getElementById('otp-countdown');
+  const resendBtn  = document.getElementById('resend-code-btn');
+  timerEl.style.display = 'inline'; resendBtn.style.display = 'none';
+  state.otpTimer = setInterval(() => {
+    seconds--;
+    if (countEl) countEl.textContent = seconds;
+    if (seconds <= 0) {
+      clearInterval(state.otpTimer);
+      timerEl.style.display = 'none';
+      resendBtn.style.display = 'inline';
+    }
+  }, 1000);
+}
+
+// OTP digit inputs
+function initOtpInputs() {
+  const digits = document.querySelectorAll('.otp-digit');
+  digits.forEach((inp, i) => {
+    inp.addEventListener('input', () => {
+      inp.value = inp.value.replace(/\D/g, '').slice(0, 1);
+      inp.classList.toggle('filled', inp.value !== '');
+      if (inp.value && i < digits.length - 1) digits[i + 1].focus();
+      const code = [...digits].map(d => d.value).join('');
+      document.getElementById('verify-code').value = code;
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !inp.value && i > 0) digits[i - 1].focus();
+    });
+    inp.addEventListener('paste', (e) => {
+      const paste = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+      paste.split('').forEach((ch, j) => { if (digits[j]) { digits[j].value = ch; digits[j].classList.add('filled'); } });
+      document.getElementById('verify-code').value = paste;
+      e.preventDefault();
+    });
+  });
+}
+
+// Toggle password visibility
+function initPasswordToggles() {
+  document.querySelectorAll('.input-eye').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const inp = btn.closest('.input-wrap').querySelector('input[type="password"], input[type="text"]');
+      if (!inp) return;
+      const show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      btn.querySelector('i').className = `fas fa-eye${show ? '-slash' : ''}`;
+    });
+  });
+}
+
+// ══════════════════════════════════════════
+//  CART
+// ══════════════════════════════════════════
+
+function saveCart() { localStorage.setItem('hl_cart', JSON.stringify(state.cart)); }
+
+function addToCart(product) {
+  const existing = state.cart.find(i => i.id === product.id);
+  if (existing) { existing.quantity++; } else {
+    state.cart.push({ id: product.id, name: product.name, price: parseFloat(product.price),
+      image: product.image, quantity: 1 });
+  }
+  saveCart();
+  updateCartBadge();
+  toast(`${product.name} agregado al carrito.`, 'success', 2000);
+}
+
+function removeFromCart(id) {
+  state.cart = state.cart.filter(i => i.id !== id);
+  saveCart(); updateCartBadge(); renderCart();
+}
+
+function changeQty(id, delta) {
+  const item = state.cart.find(i => i.id === id);
+  if (!item) return;
+  item.quantity = Math.max(1, item.quantity + delta);
+  if (item.quantity === 0) { removeFromCart(id); return; }
+  saveCart(); updateCartBadge(); renderCart();
+}
+
+function updateCartBadge() {
+  const total = state.cart.reduce((s, i) => s + i.quantity, 0);
+  document.getElementById('cart-count').textContent = total;
+}
+
+function renderCart() {
+  const el     = document.getElementById('cart-items');
+  const footer = document.getElementById('cart-footer');
+  if (state.cart.length === 0) {
+    el.innerHTML = `<div class="cart-empty"><i class="fas fa-shopping-basket"></i><p>Tu carrito está vacío</p></div>`;
+    footer.style.display = 'none'; return;
+  }
+  footer.style.display = 'flex';
+  const total = state.cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  el.innerHTML = state.cart.map(item => `
+    <div class="cart-item">
+      <img class="cart-item__img" src="${escHtml(item.image)}" alt="${escHtml(item.name)}"
+        onerror="this.src='img/arroz.jpg'" />
+      <div class="cart-item__info">
+        <p class="cart-item__name">${escHtml(item.name)}</p>
+        <p class="cart-item__price">${fmt(item.price)}</p>
+      </div>
+      <div class="cart-item__qty">
+        <button class="qty-btn" onclick="changeQty(${item.id}, -1)"><i class="fas fa-minus"></i></button>
+        <span class="qty-num">${item.quantity}</span>
+        <button class="qty-btn" onclick="changeQty(${item.id}, 1)"><i class="fas fa-plus"></i></button>
+      </div>
+      <button class="cart-remove" onclick="removeFromCart(${item.id})"><i class="fas fa-trash"></i></button>
+    </div>
+  `).join('');
+  document.getElementById('cart-total').textContent = fmt(total);
+}
+
+function buildWhatsAppMsg() {
+  const lines = state.cart.map(i => `• ${i.name} x${i.quantity} = ${fmt(i.price * i.quantity)}`);
+  const total = state.cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const user  = state.user;
+  const header = user ? `Cliente: ${user.name} (${user.phone})` : 'Cliente: Invitado';
+  return encodeURIComponent(`Hola H&L ALIMCERV, quiero hacer un pedido:\n${header}\n\n${lines.join('\n')}\n\nTotal: ${fmt(total)}`);
+}
+
+async function saveOrder() {
+  if (!state.user) { toast('Inicia sesión para guardar tu pedido.', 'warning'); openModal('login-modal'); return; }
+  if (state.cart.length === 0) return;
+  const btn = document.getElementById('checkout-save-btn');
+  setLoading(btn, true);
+  try {
+    await apiFetch(`${API.orders}?action=create`, {
+      method: 'POST',
+      body: { items: state.cart.map(i => ({ id: i.id, quantity: i.quantity })) },
+    });
+    state.cart = []; saveCart(); updateCartBadge(); renderCart();
+    closeAllModals();
+    toast('Pedido guardado correctamente.', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+  finally { setLoading(btn, false); }
+}
+
+// ══════════════════════════════════════════
+//  PRODUCTOS
+// ══════════════════════════════════════════
+
+async function loadProducts() {
+  try {
+    const params = new URLSearchParams({ action: 'list' });
+    if (state.filter.category !== 'todos') params.set('category', state.filter.category);
+    if (state.filter.q) params.set('q', state.filter.q);
+    const { products } = await apiFetch(`${API.products}?${params}`);
+    state.products = products || [];
+    renderProducts();
+  } catch {
+    toast('Error al cargar los productos.', 'error');
+  }
+}
+
+function renderProducts() {
+  const grid     = document.getElementById('productos');
+  const noResult = document.getElementById('no-results');
+  let list = [...state.products];
+
+  if (state.filter.sort === 'price_asc')  list.sort((a, b) => a.price - b.price);
+  if (state.filter.sort === 'price_desc') list.sort((a, b) => b.price - a.price);
+  if (state.filter.sort === 'name')       list.sort((a, b) => a.name.localeCompare(b.name));
+
+  if (list.length === 0) {
+    grid.innerHTML = '';
+    noResult.style.display = 'block'; return;
+  }
+  noResult.style.display = 'none';
+
+  grid.innerHTML = list.map(p => {
+    const badgeClass = p.badge?.toLowerCase() === 'oferta' ? 'producto__badge--sale'
+      : p.badge?.toLowerCase() === 'popular' ? 'producto__badge--popular' : '';
+    return `
+    <article class="producto" data-id="${p.id}">
+      <div class="producto__img-wrap">
+        ${p.badge ? `<span class="producto__badge ${badgeClass}">${escHtml(p.badge)}</span>` : ''}
+        <img src="${escHtml(p.image)}" alt="${escHtml(p.name)}" loading="lazy" onerror="this.src='img/arroz.jpg'" />
+        <button class="producto__fav" type="button" aria-label="Favorito" onclick="toggleFav(this)">
+          <i class="far fa-heart"></i>
+        </button>
+      </div>
       <div class="producto__body">
         <div class="producto__header">
-          <h3 class="producto__title">${p.nombre}</h3>
-          <button class="producto__fav" type="button" aria-label="Agregar a favoritos">
-            <i class="far fa-heart"></i>
-          </button>
+          <h3 class="producto__title">${escHtml(p.name)}</h3>
         </div>
-        <p class="producto__desc">${p.descripcion || ''}</p>
+        <span class="producto__category">${escHtml(p.category)}</span>
+        <p class="producto__desc">${escHtml(p.description || '')}</p>
         <div class="producto__footer">
-          <p class="precio" aria-label="Precio">
+          <p class="precio">
+            ${p.old_price ? `<span class="precio__old">${fmt(p.old_price)}</span>` : ''}
             <span class="precio__currency">$</span>
-            <span class="precio__amount">${Number(p.precio).toFixed(0)}</span>
+            <span class="precio__amount">${Number(p.price).toFixed(2)}</span>
           </p>
           <div class="producto__actions">
-            <button class="btn btn--secondary" type="button" data-action="agregar-carrito" aria-label="Agregar al carrito">
+            <button class="btn btn--icon btn--ghost" type="button"
+              onclick="addToCart(${JSON.stringify({id:p.id, name:p.name, price:p.price, image:p.image}).replace(/"/g,'&quot;')})"
+              aria-label="Agregar al carrito">
               <i class="fas fa-cart-plus"></i>
             </button>
-            <button class="btn btn--primary" type="button" data-action="comprar">
+            <button class="btn btn--primary btn--whatsapp btn--sm" type="button"
+              onclick="buyNow(${JSON.stringify({name:p.name, price:p.price}).replace(/"/g,'&quot;')})">
               <i class="fab fa-whatsapp"></i> Comprar
             </button>
           </div>
         </div>
       </div>
-    </article>`).join('');
-
-  productCards = Array.from(document.querySelectorAll('.producto'));
-  setupProductActions();
-  loadFavorites();
-}
-
-/* =====================================================
-   CARRITO — persistencia localStorage + Supabase
-   ===================================================== */
-function saveCart() {
-  localStorage.setItem('hl_cart', JSON.stringify(cart));
-}
-
-function getProductData(card) {
-  return {
-    id:    card.dataset.id || null,
-    name:  card.dataset.producto || 'Producto',
-    price: Number(card.dataset.precio || 0),
-    img:   card.querySelector('img')?.src || '',
-  };
-}
-
-function addToCart(name, price, img, id = null) {
-  const existing = cart.find((i) => i.name === name);
-  if (existing) {
-    existing.qty += 1;
-    showToast(`+1 "${name}" en el carrito`);
-  } else {
-    cart.push({ id, name, price, img, qty: 1 });
-    showToast(`"${name}" agregado al carrito`);
-  }
-  saveCart();
-  updateCartUI();
-}
-
-function removeFromCart(index) {
-  cart.splice(index, 1);
-  saveCart();
-  updateCartUI();
-  showToast('Producto eliminado', 'error');
-}
-
-function changeQty(index, type) {
-  const item = cart[index];
-  if (!item) return;
-  if (type === 'plus') {
-    item.qty += 1;
-  } else {
-    item.qty -= 1;
-    if (item.qty <= 0) { removeFromCart(index); return; }
-  }
-  saveCart();
-  updateCartUI();
-}
-
-function clearCart() {
-  if (!cart.length) return;
-  if (!confirm('¿Vaciar el carrito?')) return;
-  cart = [];
-  saveCart();
-  updateCartUI();
-  showToast('Carrito vaciado', 'error');
-}
-
-function updateCartUI() {
-  const totalItems = cart.reduce((a, i) => a + i.qty, 0);
-  const totalPrice = cart.reduce((a, i) => a + i.qty * i.price, 0);
-
-  if (cartCountEl) cartCountEl.textContent = totalItems;
-  if (cartTotalEl) cartTotalEl.textContent = formatPrice(totalPrice);
-
-  if (!cartItemsEl) return;
-
-  if (!cart.length) {
-    cartItemsEl.innerHTML = `
-      <p class="cart-empty">
-        <i class="fas fa-shopping-basket"></i>
-        Tu carrito está vacío
-      </p>`;
-    return;
-  }
-
-  cartItemsEl.innerHTML = `
-    <div class="cart-list">
-      ${cart.map((item, i) => `
-        <div class="cart-item">
-          <img class="cart-item__img" src="${item.img}" alt="${item.name}" />
-          <div class="cart-item__info">
-            <strong>${item.name}</strong>
-            <small>${formatPrice(item.price)} c/u</small>
-            <small class="cart-item__subtotal">Subtotal: ${formatPrice(item.qty * item.price)}</small>
-          </div>
-          <div class="cart-item__actions">
-            <button class="qty-btn" data-index="${i}" data-type="minus">−</button>
-            <span class="qty-value">${item.qty}</span>
-            <button class="qty-btn" data-index="${i}" data-type="plus">+</button>
-            <button class="remove-btn" data-index="${i}" title="Eliminar">
-              <i class="fas fa-trash"></i>
-            </button>
-          </div>
-        </div>`).join('')}
-    </div>
-    <button class="btn btn--clear" type="button" id="clear-cart-btn">
-      <i class="fas fa-trash-alt"></i> Vaciar carrito
-    </button>`;
-
-  document.getElementById('clear-cart-btn')?.addEventListener('click', clearCart);
-}
-
-const openCart  = () => { cartModal?.classList.add('is-open');    cartModal?.setAttribute('aria-hidden','false'); };
-const closeCart = () => { cartModal?.classList.remove('is-open'); cartModal?.setAttribute('aria-hidden','true'); };
-
-function setupCartEvents() {
-  openCartBtn?.addEventListener('click', openCart);
-  cartCloseBtn?.addEventListener('click', closeCart);
-  cartOverlay?.addEventListener('click', closeCart);
-  checkoutBtn?.addEventListener('click', sendCartToWhatsApp);
-
-  cartItemsEl?.addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    const index = Number(btn.dataset.index);
-    if (btn.classList.contains('remove-btn')) { removeFromCart(index); return; }
-    if (btn.classList.contains('qty-btn'))    { changeQty(index, btn.dataset.type); }
-  });
-}
-
-/* =====================================================
-   WHATSAPP + GUARDAR PEDIDO EN SUPABASE
-   ===================================================== */
-async function sendCartToWhatsApp() {
-  if (!cart.length) { showToast('Tu carrito está vacío', 'error'); return; }
-
-  const total = cart.reduce((a, i) => a + i.qty * i.price, 0);
-  const lines = cart.map((i) => `• ${i.name} x${i.qty} = ${formatPrice(i.qty * i.price)}`);
-
-  const nombreCliente = currentUser?.user_metadata?.name
-    ? `Cliente: ${currentUser.user_metadata.name}\n`
-    : '';
-
-  const msg = [
-    'Hola, H & L ALIMCERV 👋',
-    nombreCliente,
-    'Quiero realizar este pedido:',
-    '',
-    ...lines,
-    '',
-    `*Total: ${formatPrice(total)}*`,
-  ].filter(Boolean).join('\n');
-
-  /* Guardar pedido en Supabase si está logueado */
-  if (currentUser) {
-    const { error } = await db.from('pedidos').insert({
-      usuario_id: currentUser.id,
-      items: cart,
-      total,
-      estado: 'pendiente',
-    });
-    if (!error) showToast('Pedido guardado en tu historial ✓');
-  }
-
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
-}
-
-function directBuy(name, price) {
-  const msg = `Hola, quiero comprar:\n• ${name} — ${formatPrice(price)}`;
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
-}
-
-/* =====================================================
-   PRODUCTOS — acciones + modal de detalle
-   ===================================================== */
-function setupProductActions() {
-  if (!productsGrid) return;
-
-  productsGrid.addEventListener('click', (e) => {
-    const btn  = e.target.closest('button');
-    const card = e.target.closest('.producto');
-    if (!card) return;
-
-    const { id, name, price, img } = getProductData(card);
-
-    if (btn?.dataset.action === 'agregar-carrito') {
-      addToCart(name, price, img, id);
-      openCart();
-      return;
-    }
-
-    if (btn?.dataset.action === 'comprar') {
-      directBuy(name, price);
-      return;
-    }
-
-    if (btn?.classList.contains('producto__fav')) {
-      toggleFavorite(card, btn);
-      return;
-    }
-
-    if (e.target.closest('img') || e.target.closest('.producto__title')) {
-      openProductModal(card);
-    }
-  });
-}
-
-function openProductModal(card) {
-  const { name, price } = getProductData(card);
-  const img  = card.querySelector('img')?.src || '';
-  const desc = card.querySelector('.producto__desc')?.textContent || '';
-  const id   = card.dataset.id || null;
-
-  let modal = document.getElementById('product-detail-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'product-detail-modal';
-    modal.className = 'modal';
-    document.body.appendChild(modal);
-  }
-
-  modal.innerHTML = `
-    <div class="modal__overlay" id="pd-overlay"></div>
-    <div class="modal__content">
-      <div class="modal__header">
-        <h2 class="modal__title"><i class="fas fa-box-open"></i> Detalle del producto</h2>
-        <button class="modal__close" id="pd-close" type="button"><i class="fas fa-times"></i></button>
-      </div>
-      <div class="modal__body pd-body">
-        <img class="pd-img" src="${img}" alt="${name}" />
-        <h3 class="pd-name">${name}</h3>
-        <p class="pd-desc">${desc}</p>
-        <p class="pd-price">${formatPrice(price)}</p>
-      </div>
-      <div class="modal__footer" style="flex-direction:row; gap:10px;">
-        <button class="btn btn--secondary pd-add" type="button" style="flex:1">
-          <i class="fas fa-cart-plus"></i> Al carrito
-        </button>
-        <button class="btn btn--primary pd-buy" type="button" style="flex:1">
-          <i class="fab fa-whatsapp"></i> Comprar
-        </button>
-      </div>
-    </div>`;
-
-  modal.classList.add('is-open');
-  modal.setAttribute('aria-hidden', 'false');
-
-  const close = () => { modal.classList.remove('is-open'); modal.setAttribute('aria-hidden','true'); };
-  modal.querySelector('#pd-close').addEventListener('click', close);
-  modal.querySelector('#pd-overlay').addEventListener('click', close);
-  modal.querySelector('.pd-add').addEventListener('click', () => { addToCart(name, price, img, id); close(); openCart(); });
-  modal.querySelector('.pd-buy').addEventListener('click', () => { directBuy(name, price); close(); });
-}
-
-/* =====================================================
-   BUSCADOR
-   ===================================================== */
-function applySearch() {
-  const term = (searchInput?.value || '').trim().toLowerCase();
-  let visible = 0;
-
-  productCards.forEach((card) => {
-    const name = (card.dataset.producto || '').toLowerCase();
-    const desc = (card.querySelector('.producto__desc')?.textContent || '').toLowerCase();
-    const cat  = (card.dataset.categoria || '').toLowerCase();
-    const show = !term || name.includes(term) || desc.includes(term) || cat.includes(term);
-    card.style.display = show ? '' : 'none';
-    if (show) visible++;
-  });
-
-  let noResult = document.getElementById('no-results');
-  if (!visible && term) {
-    if (!noResult) {
-      noResult = document.createElement('p');
-      noResult.id = 'no-results';
-      noResult.className = 'cart-empty';
-      productsGrid?.after(noResult);
-    }
-    noResult.innerHTML = `<i class="fas fa-search"></i> Sin resultados para "<strong>${term}</strong>"`;
-    noResult.style.display = '';
-  } else if (noResult) {
-    noResult.style.display = 'none';
-  }
-}
-
-function setupSearch() {
-  if (!searchInput) return;
-  searchInput.addEventListener('input', applySearch);
-  searchInput.closest('form')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    applySearch();
-    document.getElementById('productos-section')?.scrollIntoView({ behavior: 'smooth' });
-  });
-}
-
-/* =====================================================
-   FAVORITOS — sincronizados con Supabase
-   ===================================================== */
-async function toggleFavorite(card, btn) {
-  const id   = card.dataset.id;
-  const name = card.dataset.producto;
-  const icon = btn.querySelector('i');
-  const isActive = btn.classList.contains('active');
-
-  btn.classList.toggle('active');
-  icon.classList.toggle('far', isActive);
-  icon.classList.toggle('fas', !isActive);
-
-  showToast(!isActive ? `"${name}" en favoritos ❤️` : `"${name}" eliminado de favoritos`);
-
-  if (!currentUser || !id) {
-    saveFavoritesLocal();
-    return;
-  }
-
-  if (!isActive) {
-    await db.from('favoritos').insert({ usuario_id: currentUser.id, producto_id: id });
-  } else {
-    await db.from('favoritos').delete()
-      .eq('usuario_id', currentUser.id)
-      .eq('producto_id', id);
-  }
-}
-
-function saveFavoritesLocal() {
-  const favs = productCards
-    .filter((c) => c.querySelector('.producto__fav')?.classList.contains('active'))
-    .map((c) => c.dataset.producto);
-  localStorage.setItem('hl_favs', JSON.stringify(favs));
-}
-
-async function loadFavorites() {
-  if (currentUser) {
-    const { data } = await db
-      .from('favoritos')
-      .select('producto_id')
-      .eq('usuario_id', currentUser.id);
-
-    const favIds = (data || []).map((f) => f.producto_id);
-
-    productCards.forEach((card) => {
-      if (favIds.includes(card.dataset.id)) {
-        const btn  = card.querySelector('.producto__fav');
-        const icon = btn?.querySelector('i');
-        btn?.classList.add('active');
-        icon?.classList.replace('far', 'fas');
-      }
-    });
-  } else {
-    const favs = JSON.parse(localStorage.getItem('hl_favs') || '[]');
-    productCards.forEach((card) => {
-      if (favs.includes(card.dataset.producto)) {
-        const btn  = card.querySelector('.producto__fav');
-        const icon = btn?.querySelector('i');
-        btn?.classList.add('active');
-        icon?.classList.replace('far', 'fas');
-      }
-    });
-  }
-}
-
-/* =====================================================
-   AUTENTICACIÓN — Supabase Auth
-   ===================================================== */
-function setupAuthModals() {
-  const loginModal    = document.getElementById('login-modal');
-  const registerModal = document.getElementById('register-modal');
-
-  const openModal  = (m) => { m?.classList.add('is-open');    m?.setAttribute('aria-hidden','false'); };
-  const closeModal = (m) => { m?.classList.remove('is-open'); m?.setAttribute('aria-hidden','true'); };
-
-  document.getElementById('login-close')?.addEventListener('click',    () => closeModal(loginModal));
-  document.getElementById('register-close')?.addEventListener('click', () => {
-    closeModal(registerModal);
-    goToStep(1);
-    document.getElementById('verify-code').value = '';
-  });
-  document.getElementById('login-overlay')?.addEventListener('click',    () => closeModal(loginModal));
-  document.getElementById('register-overlay')?.addEventListener('click', () => closeModal(registerModal));
-  document.getElementById('go-register')?.addEventListener('click', () => { closeModal(loginModal); openModal(registerModal); });
-  document.getElementById('go-login')?.addEventListener('click',    () => { closeModal(registerModal); openModal(loginModal); });
-
-  /* ── Registro Paso 1: enviar código ── */
-  let pendingRegister = {};
-
-  const goToStep = (step) => {
-    document.getElementById('register-step-1').style.display = step === 1 ? '' : 'none';
-    document.getElementById('register-step-2').style.display = step === 2 ? '' : 'none';
-    document.getElementById('step-dot-1').className = `register-step ${step === 1 ? 'active' : 'done'}`;
-    document.getElementById('step-dot-2').className = `register-step ${step === 2 ? 'active' : ''}`;
-    document.getElementById('register-modal-title').innerHTML = step === 1
-      ? '<i class="fas fa-user-plus"></i> Crear Cuenta'
-      : '<i class="fas fa-shield-check"></i> Verificar Cuenta';
-  };
-
-  document.getElementById('register-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const name     = document.getElementById('reg-name').value.trim();
-    const email    = document.getElementById('reg-email').value.trim();
-    const password = document.getElementById('reg-password').value;
-
-    if (password.length < 6) { showToast('La contraseña debe tener al menos 6 caracteres', 'error'); return; }
-
-    const btn = document.getElementById('reg-submit-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando código...';
-
-    const { error } = await db.auth.signUp({
-      email,
-      password,
-      options: { data: { name } },
-    });
-
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar código de verificación';
-
-    if (error) { showToast(error.message, 'error'); return; }
-
-    pendingRegister = { name, email, password };
-    document.getElementById('verify-email-display').textContent = email;
-    showToast(`Código enviado a ${email} 📧`);
-    goToStep(2);
-  });
-
-  /* ── Registro Paso 2: verificar código ── */
-  document.getElementById('verify-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const code = document.getElementById('verify-code').value.trim();
-
-    if (code.length !== 6) { showToast('Ingresa los 6 dígitos del código', 'error'); return; }
-
-    const btn = document.getElementById('verify-submit-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
-
-    const { data, error } = await db.auth.verifyOtp({
-      email: pendingRegister.email,
-      token: code,
-      type: 'signup',
-    });
-
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-check-circle"></i> Verificar cuenta';
-
-    if (error) { showToast('Código incorrecto o expirado', 'error'); return; }
-
-    showToast(`¡Bienvenido, ${pendingRegister.name}! Cuenta verificada ✅`);
-    closeModal(registerModal);
-    goToStep(1);
-    document.getElementById('verify-code').value = '';
-
-    if (data.user) {
-      currentUser = data.user;
-      renderUserMenu(data.user);
-      checkAdmin(data.user).then(showAdminBtn);
-      loadFavorites();
-    }
-  });
-
-  /* ── Reenviar código ── */
-  document.getElementById('resend-code-btn')?.addEventListener('click', async () => {
-    if (!pendingRegister.email) return;
-    const { error } = await db.auth.resend({ type: 'signup', email: pendingRegister.email });
-    if (error) { showToast(error.message, 'error'); return; }
-    showToast(`Código reenviado a ${pendingRegister.email} 📧`);
-  });
-
-  /* ── Volver al paso 1 ── */
-  document.getElementById('back-to-register')?.addEventListener('click', () => {
-    goToStep(1);
-    document.getElementById('verify-code').value = '';
-  });
-
-  /* ── Inicio de sesión ── */
-  document.getElementById('login-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email    = document.getElementById('login-email').value.trim();
-    const password = document.getElementById('login-password').value;
-
-    const btn = e.target.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    btn.textContent = 'Entrando...';
-
-    const { data, error } = await db.auth.signInWithPassword({ email, password });
-
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Entrar';
-
-    if (error) { showToast('Correo o contraseña incorrectos', 'error'); return; }
-
-    currentUser = data.user;
-    showToast(`¡Bienvenido de vuelta, ${data.user.user_metadata?.name || email}!`);
-    closeModal(loginModal);
-    renderUserMenu(data.user);
-    loadFavorites();
-  });
-
-  /* ── Escuchar cambios de sesión ── */
-  db.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session?.user) {
-      currentUser = session.user;
-      renderUserMenu(session.user);
-      checkAdmin(session.user).then(showAdminBtn);
-    }
-    if (event === 'SIGNED_OUT') {
-      currentUser = null;
-      document.getElementById('user-menu')?.remove();
-    }
-  });
-
-  /* ── Restaurar sesión activa ── */
-  db.auth.getUser().then(({ data }) => {
-    if (data?.user) {
-      currentUser = data.user;
-      renderUserMenu(data.user);
-      checkAdmin(data.user).then(showAdminBtn);
-    }
-  });
-}
-
-async function logout() {
-  await db.auth.signOut();
-  currentUser = null;
-  document.getElementById('user-menu')?.remove();
-  showToast('Sesión cerrada');
-}
-
-function renderUserMenu(user) {
-  if (document.getElementById('user-menu')) return;
-
-  const name  = user.user_metadata?.name || user.email;
-  const nav   = document.querySelector('.topbar__actions');
-  const menu  = document.createElement('div');
-  menu.id     = 'user-menu';
-  menu.className = 'user-menu';
-  menu.innerHTML = `
-    <button class="user-menu__btn" type="button">
-      <i class="fas fa-user-circle"></i>
-      <span>${name.split(' ')[0]}</span>
-      <i class="fas fa-chevron-down" style="font-size:0.7rem"></i>
-    </button>
-    <div class="user-menu__dropdown">
-      <p class="user-menu__email">${user.email}</p>
-      <button class="user-menu__item" id="logout-btn" type="button">
-        <i class="fas fa-sign-out-alt"></i> Cerrar sesión
-      </button>
-    </div>`;
-
-  nav?.insertBefore(menu, nav.firstChild);
-
-  menu.querySelector('.user-menu__btn').addEventListener('click', () => {
-    menu.classList.toggle('is-open');
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!menu.contains(e.target)) menu.classList.remove('is-open');
-  });
-
-  document.getElementById('logout-btn')?.addEventListener('click', logout);
-}
-
-/* =====================================================
-   PANEL ADMINISTRACIÓN
-   ===================================================== */
-async function checkAdmin(user) {
-  if (!user) return false;
-  const { data } = await db
-    .from('perfiles')
-    .select('es_admin')
-    .eq('id', user.id)
-    .single();
-  return data?.es_admin === true;
-}
-
-function showAdminBtn(show) {
-  const btn = document.getElementById('drawer-admin-btn');
-  if (btn) btn.style.display = show ? 'flex' : 'none';
-}
-
-function openAdminPanel() {
-  const modal = document.getElementById('admin-modal');
-  modal?.classList.add('is-open');
-  modal?.setAttribute('aria-hidden', 'false');
-  loadAdminProductos();
-}
-
-function closeAdminPanel() {
-  const modal = document.getElementById('admin-modal');
-  modal?.classList.remove('is-open');
-  modal?.setAttribute('aria-hidden', 'true');
-}
-
-function setupAdminPanel() {
-  document.getElementById('admin-close')?.addEventListener('click', closeAdminPanel);
-  document.getElementById('admin-overlay')?.addEventListener('click', closeAdminPanel);
-  document.getElementById('drawer-admin-btn')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    document.getElementById('drawer')?.classList.remove('is-open');
-    openAdminPanel();
-  });
-
-  /* Tabs */
-  document.querySelectorAll('.admin-nav-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.admin-nav-btn').forEach((b) => b.classList.remove('active'));
-      document.querySelectorAll('.admin-tab').forEach((t) => t.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = document.getElementById(`tab-${btn.dataset.tab}`);
-      tab?.classList.add('active');
-      if (btn.dataset.tab === 'pedidos') loadAdminPedidos();
-      if (btn.dataset.tab === 'productos') loadAdminProductos();
-    });
-  });
-
-  /* Formulario producto */
-  document.getElementById('btn-nuevo-producto')?.addEventListener('click', () => {
-    resetProductoForm();
-    document.getElementById('producto-form-box').style.display = 'block';
-    document.getElementById('producto-form-title').textContent = 'Nuevo Producto';
-  });
-
-  document.getElementById('cancelar-producto')?.addEventListener('click', () => {
-    document.getElementById('producto-form-box').style.display = 'none';
-    resetProductoForm();
-  });
-
-  document.getElementById('producto-form')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await guardarProducto();
-  });
-}
-
-function resetProductoForm() {
-  document.getElementById('producto-id').value = '';
-  document.getElementById('p-nombre').value = '';
-  document.getElementById('p-precio').value = '';
-  document.getElementById('p-categoria').value = 'alimentos';
-  document.getElementById('p-imagen').value = '';
-  document.getElementById('p-descripcion').value = '';
-  document.getElementById('p-destacado').checked = false;
-}
-
-async function guardarProducto() {
-  const id          = document.getElementById('producto-id').value;
-  const nombre      = document.getElementById('p-nombre').value.trim();
-  const precio      = parseFloat(document.getElementById('p-precio').value);
-  const categoria   = document.getElementById('p-categoria').value;
-  const imagen_url  = document.getElementById('p-imagen').value.trim();
-  const descripcion = document.getElementById('p-descripcion').value.trim();
-  const destacado   = document.getElementById('p-destacado').checked;
-
-  const payload = { nombre, precio, categoria, imagen_url, descripcion, destacado };
-  let error;
-
-  if (id) {
-    ({ error } = await db.from('productos').update(payload).eq('id', id));
-  } else {
-    ({ error } = await db.from('productos').insert(payload));
-  }
-
-  if (error) { showToast(error.message, 'error'); return; }
-
-  showToast(id ? 'Producto actualizado ✓' : 'Producto agregado ✓');
-  document.getElementById('producto-form-box').style.display = 'none';
-  resetProductoForm();
-  loadAdminProductos();
-  loadProducts(); /* Refresca el catálogo visible */
-}
-
-async function loadAdminProductos() {
-  const tbody = document.getElementById('admin-productos-body');
-  if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="5" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>`;
-
-  const { data, error } = await db.from('productos').select('*').order('created_at', { ascending: false });
-
-  if (error || !data?.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="admin-loading">No hay productos aún.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = data.map((p) => `
-    <tr data-id="${p.id}">
-      <td><img class="admin-table__img" src="${p.imagen_url || 'img/img/arroz.jpg'}" alt="${p.nombre}" /></td>
-      <td><strong>${p.nombre}</strong></td>
-      <td>$${Number(p.precio).toFixed(2)}</td>
-      <td>${p.categoria || '—'}</td>
-      <td>
-        <div class="admin-table__actions">
-          <button class="admin-btn admin-btn--edit" data-action="editar" data-id="${p.id}" type="button">
-            <i class="fas fa-pen"></i> Editar
-          </button>
-          <button class="admin-btn admin-btn--delete" data-action="eliminar" data-id="${p.id}" type="button">
-            <i class="fas fa-trash"></i> Eliminar
-          </button>
-        </div>
-      </td>
-    </tr>`).join('');
-
-  /* Guardar data para edición */
-  window._adminProductos = data;
-
-  tbody.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    const id = btn.dataset.id;
-
-    if (btn.dataset.action === 'eliminar') {
-      if (!confirm('¿Eliminar este producto?')) return;
-      const { error } = await db.from('productos').delete().eq('id', id);
-      if (error) { showToast(error.message, 'error'); return; }
-      showToast('Producto eliminado', 'error');
-      loadAdminProductos();
-      loadProducts();
-    }
-
-    if (btn.dataset.action === 'editar') {
-      const p = window._adminProductos?.find((x) => x.id === id);
-      if (!p) return;
-      document.getElementById('producto-id').value        = p.id;
-      document.getElementById('p-nombre').value           = p.nombre;
-      document.getElementById('p-precio').value           = p.precio;
-      document.getElementById('p-categoria').value        = p.categoria || 'general';
-      document.getElementById('p-imagen').value           = p.imagen_url || '';
-      document.getElementById('p-descripcion').value      = p.descripcion || '';
-      document.getElementById('p-destacado').checked      = p.destacado || false;
-      document.getElementById('producto-form-title').textContent = 'Editar Producto';
-      document.getElementById('producto-form-box').style.display = 'block';
-      document.getElementById('producto-form-box').scrollIntoView({ behavior: 'smooth' });
-    }
-  }, { once: false });
-}
-
-async function loadAdminPedidos() {
-  const tbody = document.getElementById('admin-pedidos-body');
-  if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="5" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>`;
-
-  const { data, error } = await db
-    .from('pedidos')
-    .select('*, perfiles(nombre)')
-    .order('created_at', { ascending: false });
-
-  if (error || !data?.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="admin-loading">No hay pedidos aún.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = data.map((p) => {
-    const fecha   = new Date(p.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
-    const cliente = p.perfiles?.nombre || '—';
-    const items   = (p.items || []).map((i) => `${i.name} x${i.qty}`).join(', ');
-    return `
-      <tr>
-        <td>${fecha}</td>
-        <td>${cliente}</td>
-        <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${items}</td>
-        <td><strong>$${Number(p.total).toFixed(2)}</strong></td>
-        <td><span class="admin-badge admin-badge--${p.estado}">${p.estado}</span></td>
-      </tr>`;
+    </article>`;
   }).join('');
 }
 
-/* =====================================================
-   MENÚ LATERAL (DRAWER)
-   ===================================================== */
-function setupDrawer() {
-  const drawer  = document.getElementById('drawer');
-  const overlay = document.getElementById('drawer-overlay');
-
-  const open  = () => { drawer?.classList.add('is-open');    drawer?.setAttribute('aria-hidden','false'); };
-  const close = () => { drawer?.classList.remove('is-open'); drawer?.setAttribute('aria-hidden','true'); };
-
-  document.getElementById('open-menu')?.addEventListener('click', open);
-  document.getElementById('close-menu')?.addEventListener('click', close);
-  overlay?.addEventListener('click', close);
-  drawer?.querySelectorAll('.drawer__link').forEach((link) => link.addEventListener('click', close));
-
-  document.getElementById('drawer-login-btn')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    close();
-    const m = document.getElementById('login-modal');
-    m?.classList.add('is-open');
-    m?.setAttribute('aria-hidden', 'false');
-  });
-
-  document.getElementById('drawer-register-btn')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    close();
-    const m = document.getElementById('register-modal');
-    m?.classList.add('is-open');
-    m?.setAttribute('aria-hidden', 'false');
-  });
+function buyNow(product) {
+  const msg = encodeURIComponent(`Hola H&L ALIMCERV, me interesa comprar:\n• ${product.name} — ${fmt(product.price)}`);
+  window.open(`https://wa.me/${WA_NUMBER}?text=${msg}`, '_blank');
 }
 
-/* =====================================================
-   FILTROS
-   ===================================================== */
-function setupFilters() {
-  const filterButtons = Array.from(document.querySelectorAll('.filter-btn'));
-  filterButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      filterButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      const filter = btn.dataset.filter || 'todos';
-      productCards.forEach((card) => {
-        card.style.display = filter === 'todos' || card.dataset.categoria === filter ? '' : 'none';
-      });
+function toggleFav(btn) {
+  btn.classList.toggle('active');
+  const icon = btn.querySelector('i');
+  icon.className = btn.classList.contains('active') ? 'fas fa-heart' : 'far fa-heart';
+}
+
+// ══════════════════════════════════════════
+//  MODALES
+// ══════════════════════════════════════════
+
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('open');
+  el.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('open');
+  el.setAttribute('aria-hidden', 'true');
+  if (!document.querySelector('.modal.open, .admin-overlay.open')) {
+    document.body.style.overflow = '';
+  }
+}
+
+function closeAllModals() {
+  document.querySelectorAll('.modal.open').forEach(m => closeModal(m.id));
+}
+
+function openAdmin() {
+  if (!state.user || state.user.role !== 'admin') return;
+  const el = document.getElementById('admin-modal');
+  el.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadAdminDashboard();
+}
+
+function closeAdmin() {
+  const el = document.getElementById('admin-modal');
+  el.classList.remove('open');
+  if (!document.querySelector('.modal.open')) document.body.style.overflow = '';
+}
+
+// ══════════════════════════════════════════
+//  DRAWER
+// ══════════════════════════════════════════
+
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer').setAttribute('aria-hidden', 'false');
+  document.getElementById('open-menu').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawer').setAttribute('aria-hidden', 'true');
+  document.getElementById('open-menu').classList.remove('open');
+  if (!document.querySelector('.modal.open, .admin-overlay.open')) {
+    document.body.style.overflow = '';
+  }
+}
+
+// ══════════════════════════════════════════
+//  MIS PEDIDOS
+// ══════════════════════════════════════════
+
+async function loadMyOrders() {
+  openModal('orders-modal');
+  const el = document.getElementById('orders-list');
+  el.innerHTML = '<p class="loading-text"><i class="fas fa-spinner fa-spin"></i> Cargando...</p>';
+  try {
+    const { orders } = await apiFetch(`${API.orders}?action=my_orders`);
+    if (!orders.length) { el.innerHTML = '<p class="loading-text">No tienes pedidos aún.</p>'; return; }
+    el.innerHTML = orders.map(o => `
+      <div class="order-card">
+        <div class="order-card__header">
+          <span class="order-card__id">Pedido #${o.id}</span>
+          <span class="${statusClass(o.status)}">${statusLabel(o.status)}</span>
+        </div>
+        <p class="order-card__items">${escHtml(o.items_summary || '')}</p>
+        <div class="order-card__footer">
+          <span class="order-card__total">${fmt(o.total)}</span>
+          <span class="order-card__date">${fmtDate(o.created_at)}</span>
+        </div>
+      </div>`).join('');
+  } catch (e) { el.innerHTML = `<p class="loading-text" style="color:var(--red)">${e.message}</p>`; }
+}
+
+// ══════════════════════════════════════════
+//  ADMIN — Dashboard
+// ══════════════════════════════════════════
+
+async function loadAdminDashboard() {
+  try {
+    const data = await apiFetch(`${API.admin}?action=stats`);
+    const { stats, recent_orders, top_products } = data;
+    document.getElementById('stat-users').textContent    = stats.total_users;
+    document.getElementById('stat-orders').textContent   = stats.total_orders;
+    document.getElementById('stat-revenue').textContent  = fmt(stats.total_revenue);
+    document.getElementById('stat-products').textContent = stats.total_products;
+
+    // Pedidos recientes
+    const rEl = document.getElementById('admin-recent-orders');
+    rEl.innerHTML = recent_orders.length ? `<table class="admin-table" style="min-width:unset">
+      <thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Estado</th></tr></thead>
+      <tbody>${recent_orders.map(o => `<tr>
+        <td>#${o.id}</td>
+        <td>${escHtml(o.user_name)}</td>
+        <td>${fmt(o.total)}</td>
+        <td><span class="${statusClass(o.status)}">${statusLabel(o.status)}</span></td>
+      </tr>`).join('')}</tbody></table>` : '<p style="color:var(--text-muted);font-size:.85rem">Sin pedidos aún.</p>';
+
+    // Top productos
+    const tEl = document.getElementById('admin-top-products');
+    tEl.innerHTML = top_products.length ? top_products.map((p, i) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:.85rem"><strong>#${i+1}</strong> ${escHtml(p.product_name)}</span>
+        <span style="color:var(--gold);font-size:.82rem">${p.sold} vendidos</span>
+      </div>`).join('') : '<p style="color:var(--text-muted);font-size:.85rem">Sin datos.</p>';
+
+    // Pedidos pendientes badge
+    const pending = recent_orders.filter(o => o.status === 'pendiente').length;
+    const badge = document.getElementById('admin-orders-badge');
+    if (pending > 0) { badge.textContent = pending; badge.classList.add('show'); }
+  } catch (e) { console.error('Dashboard error:', e); }
+}
+
+// ── Admin: Productos ──────────────────────────────────
+async function loadAdminProducts() {
+  const tbody = document.getElementById('admin-productos-body');
+  tbody.innerHTML = '<tr><td colspan="7" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+  try {
+    const { products } = await apiFetch(`${API.products}?action=list&show_all=1`);
+    if (!products.length) { tbody.innerHTML = '<tr><td colspan="7" class="admin-loading">No hay productos.</td></tr>'; return; }
+    tbody.innerHTML = products.map(p => `<tr>
+      <td><img src="${escHtml(p.image)}" alt="" onerror="this.src='img/arroz.jpg'" /></td>
+      <td><strong>${escHtml(p.name)}</strong><br><small style="color:var(--text-muted)">${escHtml(p.description||'').slice(0,50)}</small></td>
+      <td>${fmt(p.price)}</td>
+      <td><span class="producto__category">${escHtml(p.category)}</span></td>
+      <td>${p.stock}</td>
+      <td><span class="status-badge ${p.is_active ? 'status--entregado' : 'status--cancelado'}">${p.is_active ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="admin-actions">
+        <button class="btn btn--sm btn--ghost" onclick="editProduct(${p.id})"><i class="fas fa-edit"></i></button>
+        <button class="btn btn--sm btn--ghost" onclick="toggleProduct(${p.id},${p.is_active})" title="Cambiar estado"><i class="fas fa-toggle-${p.is_active?'on':'off'}"></i></button>
+        <button class="btn btn--sm btn--danger" onclick="deleteProduct(${p.id},'${escHtml(p.name)}')"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="7" class="admin-loading" style="color:var(--red)">${e.message}</td></tr>`; }
+}
+
+function showProductForm(product = null) {
+  document.getElementById('producto-form-box').style.display = 'block';
+  document.getElementById('producto-form-title').textContent = product ? 'Editar Producto' : 'Nuevo Producto';
+  document.getElementById('producto-id').value    = product?.id || '';
+  document.getElementById('p-nombre').value       = product?.name || '';
+  document.getElementById('p-precio').value       = product?.price || '';
+  document.getElementById('p-precio-old').value   = product?.old_price || '';
+  document.getElementById('p-categoria').value    = product?.category || 'alimentos';
+  document.getElementById('p-stock').value        = product?.stock || 0;
+  document.getElementById('p-badge').value        = product?.badge || '';
+  document.getElementById('p-descripcion').value  = product?.description || '';
+  document.getElementById('p-imagen').value       = product?.image || '';
+  document.getElementById('p-destacado').checked  = !!product?.is_featured;
+
+  const preview = document.getElementById('image-preview');
+  if (product?.image) {
+    preview.innerHTML = `<img src="${escHtml(product.image)}" alt="" style="max-height:120px;border-radius:8px" onerror="this.src='img/arroz.jpg'" />`;
+  } else {
+    preview.innerHTML = `<i class="fas fa-cloud-upload-alt"></i><p>Arrastra o haz clic</p><small>JPEG, PNG, WEBP — máx. 5 MB</small>`;
+  }
+  document.getElementById('producto-form-box').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function editProduct(id) {
+  try {
+    const { product } = await apiFetch(`${API.products}?action=get&id=${id}`);
+    showProductForm(product);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function toggleProduct(id, current) {
+  try {
+    await apiFetch(`${API.products}?action=toggle`, { method: 'POST', body: { id } });
+    toast(`Producto ${current ? 'desactivado' : 'activado'}.`, 'info');
+    loadAdminProducts();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteProduct(id, name) {
+  if (!confirm(`¿Eliminar "${name}"?`)) return;
+  try {
+    await apiFetch(`${API.products}?action=delete`, { method: 'POST', body: { id } });
+    toast('Producto eliminado.', 'success');
+    loadAdminProducts();
+    loadProducts();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function submitProductForm(e) {
+  e.preventDefault();
+  const id  = document.getElementById('producto-id').value;
+  const btn = e.target.querySelector('[type="submit"]');
+  const payload = {
+    name:        document.getElementById('p-nombre').value,
+    price:       document.getElementById('p-precio').value,
+    old_price:   document.getElementById('p-precio-old').value,
+    category:    document.getElementById('p-categoria').value,
+    stock:       document.getElementById('p-stock').value,
+    badge:       document.getElementById('p-badge').value,
+    description: document.getElementById('p-descripcion').value,
+    image:       document.getElementById('p-imagen').value || 'img/arroz.jpg',
+    is_featured: document.getElementById('p-destacado').checked,
+  };
+  if (id) payload.id = id;
+  setLoading(btn, true);
+  try {
+    await apiFetch(`${API.products}?action=${id ? 'update' : 'create'}`, { method: 'POST', body: payload });
+    toast(`Producto ${id ? 'actualizado' : 'creado'} correctamente.`, 'success');
+    document.getElementById('producto-form-box').style.display = 'none';
+    document.getElementById('producto-form').reset();
+    loadAdminProducts();
+    loadProducts();
+  } catch (e) { toast(e.message, 'error'); }
+  finally { setLoading(btn, false); }
+}
+
+// Image upload
+async function uploadProductImage(file) {
+  const area    = document.getElementById('image-upload-area');
+  const preview = document.getElementById('image-preview');
+  area.style.opacity = '.5';
+  try {
+    const fd = new FormData();
+    fd.append('image', file);
+    const res  = await fetch(API.upload, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al subir imagen.');
+    document.getElementById('p-imagen').value = data.url;
+    preview.innerHTML = `<img src="${escHtml(data.url)}" alt="" style="max-height:120px;border-radius:8px" />`;
+    toast('Imagen subida.', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+  finally { area.style.opacity = '1'; }
+}
+
+// ── Admin: Pedidos ────────────────────────────────────
+async function loadAdminOrders(filterStatus = '') {
+  const tbody = document.getElementById('admin-pedidos-body');
+  tbody.innerHTML = '<tr><td colspan="8" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+  try {
+    const { orders } = await apiFetch(`${API.orders}?action=admin_list`);
+    const filtered   = filterStatus ? orders.filter(o => o.status === filterStatus) : orders;
+    if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="8" class="admin-loading">No hay pedidos.</td></tr>'; return; }
+    tbody.innerHTML = filtered.map(o => `<tr>
+      <td><strong>#${o.id}</strong></td>
+      <td>${fmtDate(o.created_at)}</td>
+      <td>${escHtml(o.user_name)}</td>
+      <td>${escHtml(o.user_phone)}</td>
+      <td style="max-width:200px;font-size:.78rem">${escHtml(o.items_summary || '')}</td>
+      <td><strong>${fmt(o.total)}</strong></td>
+      <td><span class="${statusClass(o.status)}">${statusLabel(o.status)}</span></td>
+      <td>
+        <select class="filter-select" style="font-size:.75rem;min-width:120px" onchange="updateOrderStatus(${o.id}, this.value)">
+          ${['pendiente','confirmado','en_camino','entregado','cancelado'].map(s =>
+            `<option value="${s}" ${s===o.status?'selected':''}>${statusLabel(s)}</option>`
+          ).join('')}
+        </select>
+      </td>
+    </tr>`).join('');
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="8" class="admin-loading" style="color:var(--red)">${e.message}</td></tr>`; }
+}
+
+async function updateOrderStatus(id, status) {
+  try {
+    await apiFetch(`${API.orders}?action=update_status`, { method: 'POST', body: { id, status } });
+    toast('Estado actualizado.', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Admin: Usuarios ───────────────────────────────────
+async function loadAdminUsers() {
+  const tbody = document.getElementById('admin-usuarios-body');
+  tbody.innerHTML = '<tr><td colspan="10" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+  try {
+    const { users } = await apiFetch(`${API.admin}?action=users`);
+    state.adminData.users = users;
+    renderAdminUsers(users);
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="10" class="admin-loading" style="color:var(--red)">${e.message}</td></tr>`; }
+}
+
+function renderAdminUsers(users) {
+  const tbody = document.getElementById('admin-usuarios-body');
+  if (!users.length) { tbody.innerHTML = '<tr><td colspan="10" class="admin-loading">No hay usuarios.</td></tr>'; return; }
+  tbody.innerHTML = users.map(u => `<tr>
+    <td>${u.id}</td>
+    <td><strong>${escHtml(u.name)}</strong></td>
+    <td>${escHtml(u.phone)}</td>
+    <td>
+      <span class="pw-hidden" id="pw-${u.id}">••••••••</span>
+      <span class="pw-toggle" onclick="togglePw(${u.id})" title="Ver/ocultar">👁</span>
+    </td>
+    <td><span class="status-badge ${u.role==='admin'?'status--confirmado':'status--pendiente'}">${u.role}</span></td>
+    <td><span class="status-badge ${u.is_verified?'status--entregado':'status--cancelado'}">${u.is_verified?'Sí':'No'}</span></td>
+    <td>${fmtDate(u.created_at)}</td>
+    <td>${u.total_orders}</td>
+    <td>${fmt(u.total_spent)}</td>
+    <td class="admin-actions">
+      <button class="btn btn--sm btn--ghost" onclick="viewUserDetail(${u.id})" title="Ver detalle"><i class="fas fa-eye"></i></button>
+      ${u.role !== 'admin' ? `<button class="btn btn--sm btn--danger" onclick="deleteUser(${u.id},'${escHtml(u.name)}')" title="Eliminar"><i class="fas fa-trash"></i></button>` : ''}
+    </td>
+  </tr>`).join('');
+}
+
+// Contraseñas visibles (muestra hash, no real – aviso de seguridad)
+const pwVisible = {};
+function togglePw(id) {
+  const el = document.getElementById(`pw-${id}`);
+  if (!el) return;
+  pwVisible[id] = !pwVisible[id];
+  el.textContent = pwVisible[id] ? '[hash bcrypt]' : '••••••••';
+}
+
+async function viewUserDetail(id) {
+  openModal('user-detail-modal');
+  const body = document.getElementById('user-detail-body');
+  body.innerHTML = '<p class="loading-text"><i class="fas fa-spinner fa-spin"></i> Cargando...</p>';
+  try {
+    const { user } = await apiFetch(`${API.admin}?action=user_detail&id=${id}`);
+    body.innerHTML = `
+      <div class="user-detail-grid">
+        <div class="user-detail-info"><label>Nombre</label><p>${escHtml(user.name)}</p></div>
+        <div class="user-detail-info"><label>Teléfono</label><p>${escHtml(user.phone)}</p></div>
+        <div class="user-detail-info"><label>Rol</label><p>${escHtml(user.role)}</p></div>
+        <div class="user-detail-info"><label>Verificado</label><p>${user.is_verified?'Sí':'No'}</p></div>
+        <div class="user-detail-info"><label>Registro</label><p>${fmtDate(user.created_at)}</p></div>
+        <div class="user-detail-info"><label>Último acceso</label><p>${user.last_login?fmtDate(user.last_login):'—'}</p></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+        <div class="user-detail-info"><label>Total pedidos</label><p>${user.stats?.total_orders||0}</p></div>
+        <div class="user-detail-info"><label>Total gastado</label><p>${fmt(user.stats?.total_spent||0)}</p></div>
+        <div class="user-detail-info"><label>Promedio</label><p>${fmt(user.stats?.avg_order||0)}</p></div>
+      </div>
+      <div class="user-detail-section">
+        <h4>Pedidos</h4>
+        ${user.orders.length ? `<table class="admin-table" style="min-width:unset"><thead><tr><th>#</th><th>Fecha</th><th>Productos</th><th>Total</th><th>Estado</th></tr></thead>
+        <tbody>${user.orders.map(o=>`<tr><td>#${o.id}</td><td>${fmtDate(o.created_at)}</td><td style="font-size:.78rem">${escHtml(o.items||'')}</td><td>${fmt(o.total)}</td><td><span class="${statusClass(o.status)}">${statusLabel(o.status)}</span></td></tr>`).join('')}</tbody></table>`
+        : '<p style="color:var(--text-muted);font-size:.85rem">Sin pedidos.</p>'}
+      </div>
+      <div class="user-detail-section">
+        <h4>Actividad reciente</h4>
+        ${user.activity.slice(0,15).map(a=>`
+          <div style="display:flex;gap:1rem;align-items:flex-start;padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.78rem">
+            <span style="color:var(--text-muted);flex-shrink:0">${fmtDate(a.created_at)}</span>
+            <span style="color:var(--gold);flex-shrink:0">${escHtml(a.action)}</span>
+            <span style="color:var(--text-secondary)">${escHtml(a.details||'')}</span>
+          </div>`).join('') || '<p style="color:var(--text-muted);font-size:.85rem">Sin actividad.</p>'}
+      </div>`;
+  } catch (e) { body.innerHTML = `<p class="loading-text" style="color:var(--red)">${e.message}</p>`; }
+}
+
+async function deleteUser(id, name) {
+  if (!confirm(`¿Eliminar al usuario "${name}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    await apiFetch(`${API.admin}?action=delete_user`, { method: 'POST', body: { id } });
+    toast('Usuario eliminado.', 'success');
+    loadAdminUsers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Admin: Actividad ──────────────────────────────────
+async function loadAdminActivity() {
+  const tbody = document.getElementById('admin-actividad-body');
+  tbody.innerHTML = '<tr><td colspan="5" class="admin-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</td></tr>';
+  try {
+    const { activity } = await apiFetch(`${API.admin}?action=activity&limit=100`);
+    if (!activity.length) { tbody.innerHTML = '<tr><td colspan="5" class="admin-loading">Sin actividad.</td></tr>'; return; }
+    tbody.innerHTML = activity.map(a => `<tr>
+      <td style="white-space:nowrap">${fmtDate(a.created_at)}</td>
+      <td>${a.user_name ? `${escHtml(a.user_name)} <small style="color:var(--text-muted)">(${escHtml(a.user_phone||'')})</small>` : '<span style="color:var(--text-muted)">Anónimo</span>'}</td>
+      <td><code style="color:var(--gold);font-size:.78rem">${escHtml(a.action)}</code></td>
+      <td style="font-size:.75rem;color:var(--text-muted)">${escHtml(a.details||'')}</td>
+      <td style="font-size:.75rem;color:var(--text-muted)">${escHtml(a.ip_address||'')}</td>
+    </tr>`).join('');
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="5" class="admin-loading" style="color:var(--red)">${e.message}</td></tr>`; }
+}
+
+// ══════════════════════════════════════════
+//  STATUS HELPERS
+// ══════════════════════════════════════════
+
+function statusClass(s) { return `status-badge status--${s}`; }
+function statusLabel(s) {
+  return { pendiente:'Pendiente', confirmado:'Confirmado', en_camino:'En camino',
+           entregado:'Entregado', cancelado:'Cancelado' }[s] || s;
+}
+
+// ══════════════════════════════════════════
+//  EVENT LISTENERS
+// ══════════════════════════════════════════
+
+document.addEventListener('DOMContentLoaded', () => {
+
+  // Año en footer
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Cargar productos y estado inicial
+  loadProducts();
+  updateCartBadge();
+  updateAuthUI();
+  initOtpInputs();
+  initPasswordToggles();
+
+  // ── Topbar scroll ─────────────────────────────────
+  window.addEventListener('scroll', () => {
+    document.getElementById('topbar').classList.toggle('scrolled', window.scrollY > 20);
+    document.getElementById('scroll-top-btn').classList.toggle('visible', window.scrollY > 400);
+  });
+  document.getElementById('scroll-top-btn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+  // ── Búsqueda ──────────────────────────────────────
+  ['hero-search-form', 'topbar-search-form'].forEach(id => {
+    document.getElementById(id)?.addEventListener('submit', e => {
+      e.preventDefault();
+      const q = (document.getElementById('hero-q') || document.getElementById('topbar-q')).value.trim();
+      state.filter.q = q; loadProducts();
+      document.getElementById('productos-section').scrollIntoView({ behavior: 'smooth' });
     });
   });
-}
+  document.getElementById('topbar-q')?.addEventListener('input', e => {
+    state.filter.q = e.target.value; loadProducts();
+  });
+  document.getElementById('clear-search-btn')?.addEventListener('click', () => {
+    state.filter.q = ''; state.filter.category = 'todos';
+    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('chip--active', c.dataset.cat === 'todos'));
+    loadProducts();
+  });
 
-/* =====================================================
-   INIT
-   ===================================================== */
-document.addEventListener('DOMContentLoaded', async () => {
-  setYear();
-  updateCartUI();
-  setupCartEvents();
-  setupSearch();
-  setupDrawer();
-  setupFilters();
-  setupAuthModals();
-  setupAdminPanel();
-  await loadProducts();
-  applySearch();
+  // ── Chips de categoría ────────────────────────────
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('chip--active'));
+      chip.classList.add('chip--active');
+      state.filter.category = chip.dataset.cat;
+      document.getElementById('filter-category').value = chip.dataset.cat;
+      loadProducts();
+    });
+  });
+
+  document.getElementById('filter-category')?.addEventListener('change', e => {
+    state.filter.category = e.target.value;
+    document.querySelectorAll('.chip').forEach(c => c.classList.toggle('chip--active', c.dataset.cat === e.target.value));
+    loadProducts();
+  });
+  document.getElementById('filter-sort')?.addEventListener('change', e => {
+    state.filter.sort = e.target.value; renderProducts();
+  });
+
+  // ── Drawer ────────────────────────────────────────
+  document.getElementById('open-menu').addEventListener('click', openDrawer);
+  document.getElementById('close-menu').addEventListener('click', closeDrawer);
+  document.getElementById('drawer-overlay').addEventListener('click', closeDrawer);
+  document.getElementById('drawer').querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', closeDrawer);
+  });
+
+  // ── Carrito ───────────────────────────────────────
+  document.getElementById('open-cart').addEventListener('click', () => { renderCart(); openModal('cart-modal'); });
+  document.getElementById('cart-close').addEventListener('click', () => closeModal('cart-modal'));
+  document.querySelector('#cart-modal .modal__overlay').addEventListener('click', () => closeModal('cart-modal'));
+  document.getElementById('checkout-btn').addEventListener('click', () => {
+    if (!state.cart.length) return;
+    window.open(`https://wa.me/${WA_NUMBER}?text=${buildWhatsAppMsg()}`, '_blank');
+  });
+  document.getElementById('checkout-save-btn').addEventListener('click', saveOrder);
+
+  // ── Auth buttons ──────────────────────────────────
+  ['btn-login-top', 'drawer-login-btn'].forEach(id =>
+    document.getElementById(id)?.addEventListener('click', () => { closeDrawer(); openModal('login-modal'); }));
+  ['btn-register-top', 'drawer-register-btn'].forEach(id =>
+    document.getElementById(id)?.addEventListener('click', () => { closeDrawer(); openModal('register-modal'); }));
+  document.getElementById('go-register').addEventListener('click', () => { closeModal('login-modal'); openModal('register-modal'); });
+  document.getElementById('go-login').addEventListener('click', () => { closeModal('register-modal'); openModal('login-modal'); });
+
+  // Cerrar modales auth
+  document.getElementById('login-close').addEventListener('click', () => closeModal('login-modal'));
+  document.getElementById('register-close').addEventListener('click', () => closeModal('register-modal'));
+  document.querySelector('#login-modal .modal__overlay').addEventListener('click', () => closeModal('login-modal'));
+  document.querySelector('#register-modal .modal__overlay').addEventListener('click', () => closeModal('register-modal'));
+
+  // ── Login form ────────────────────────────────────
+  document.getElementById('login-form').addEventListener('submit', e => {
+    e.preventDefault();
+    doLogin(document.getElementById('login-phone').value.trim(), document.getElementById('login-password').value);
+  });
+
+  // ── Register form ─────────────────────────────────
+  document.getElementById('register-form').addEventListener('submit', e => {
+    e.preventDefault();
+    doRegister(
+      document.getElementById('reg-name').value.trim(),
+      document.getElementById('reg-phone').value.trim(),
+      document.getElementById('reg-password').value,
+    );
+  });
+
+  // ── Verify OTP form ───────────────────────────────
+  document.getElementById('verify-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const code = document.getElementById('verify-code').value;
+    if (code.length !== 6) { document.getElementById('verify-error').textContent = 'Ingresa los 6 dígitos.'; return; }
+    doVerifyOtp(code);
+  });
+  document.getElementById('back-to-register').addEventListener('click', () => {
+    document.getElementById('register-step-2').style.display = 'none';
+    document.getElementById('register-step-1').style.display = 'block';
+    document.getElementById('step-dot-2').classList.remove('step-dot--active');
+    document.getElementById('step-dot-1').classList.remove('step-dot--done');
+    document.getElementById('step-dot-1').classList.add('step-dot--active');
+  });
+  document.getElementById('resend-code-btn').addEventListener('click', async () => {
+    if (!state.otpPhone) return;
+    try {
+      const data = await apiFetch(`${API.auth}?action=resend_otp`, { method: 'POST', body: { phone: state.otpPhone } });
+      if (data.demo_code) {
+        document.getElementById('otp-demo-alert').style.display = 'flex';
+        document.getElementById('otp-demo-code').textContent = data.demo_code;
+      }
+      startOtpTimer();
+      toast('Código reenviado.', 'info');
+    } catch (e) { toast(e.message, 'error'); }
+  });
+
+  // ── User menu dropdown ────────────────────────────
+  document.getElementById('user-menu-btn')?.addEventListener('click', () => {
+    document.getElementById('user-dropdown').classList.toggle('open');
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#user-menu')) {
+      document.getElementById('user-dropdown')?.classList.remove('open');
+    }
+  });
+
+  // ── Logout ────────────────────────────────────────
+  ['dd-logout', 'drawer-logout-btn'].forEach(id =>
+    document.getElementById(id)?.addEventListener('click', doLogout));
+
+  // ── Mis pedidos ───────────────────────────────────
+  ['dd-my-orders', 'drawer-orders-btn'].forEach(id =>
+    document.getElementById(id)?.addEventListener('click', () => { closeDrawer(); loadMyOrders(); }));
+  document.getElementById('orders-close').addEventListener('click', () => closeModal('orders-modal'));
+  document.querySelector('#orders-modal .modal__overlay').addEventListener('click', () => closeModal('orders-modal'));
+
+  // ── Admin panel ───────────────────────────────────
+  ['dd-admin', 'drawer-admin-btn'].forEach(id =>
+    document.getElementById(id)?.addEventListener('click', () => { closeDrawer(); openAdmin(); }));
+  document.getElementById('admin-close').addEventListener('click', closeAdmin);
+
+  // Admin nav tabs
+  document.querySelectorAll('.admin-nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = document.getElementById(`tab-${btn.dataset.tab}`);
+      tab?.classList.add('active');
+      switch (btn.dataset.tab) {
+        case 'dashboard': loadAdminDashboard(); break;
+        case 'productos': loadAdminProducts(); break;
+        case 'pedidos':   loadAdminOrders(); break;
+        case 'usuarios':  loadAdminUsers(); break;
+        case 'actividad': loadAdminActivity(); break;
+      }
+    });
+  });
+
+  // Admin productos form
+  document.getElementById('btn-nuevo-producto').addEventListener('click', () => {
+    showProductForm(null);
+  });
+  document.getElementById('cancelar-producto').addEventListener('click', () => {
+    document.getElementById('producto-form-box').style.display = 'none';
+    document.getElementById('producto-form').reset();
+  });
+  document.getElementById('producto-form').addEventListener('submit', submitProductForm);
+
+  // Image upload
+  const uploadArea = document.getElementById('image-upload-area');
+  const fileInput  = document.getElementById('p-imagen-file');
+  uploadArea?.addEventListener('click', () => fileInput?.click());
+  fileInput?.addEventListener('change', () => { if (fileInput.files[0]) uploadProductImage(fileInput.files[0]); });
+  uploadArea?.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+  uploadArea?.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+  uploadArea?.addEventListener('drop', e => {
+    e.preventDefault(); uploadArea.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) uploadProductImage(e.dataTransfer.files[0]);
+  });
+
+  // Admin orders filter
+  document.getElementById('admin-orders-filter')?.addEventListener('change', e => loadAdminOrders(e.target.value));
+
+  // Admin users search
+  document.getElementById('admin-users-search')?.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    const filtered = state.adminData.users.filter(u =>
+      u.name.toLowerCase().includes(q) || u.phone.includes(q));
+    renderAdminUsers(filtered);
+  });
+
+  // Refresh activity
+  document.getElementById('refresh-activity')?.addEventListener('click', loadAdminActivity);
+
+  // User detail close
+  document.getElementById('user-detail-close').addEventListener('click', () => closeModal('user-detail-modal'));
+  document.querySelector('#user-detail-modal .modal__overlay').addEventListener('click', () => closeModal('user-detail-modal'));
+
+  // ── Escape key ────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeAllModals();
+      closeDrawer();
+    }
+  });
 });
