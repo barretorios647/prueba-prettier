@@ -1,39 +1,38 @@
 <?php
 /* =====================================================
    H & L ALIMCERV Group — Configuración principal
-   Edita las constantes DB_* antes de subir a InfinityFree
    ===================================================== */
 
 // Suprimir errores/warnings para que no rompan el JSON
 error_reporting(0);
 ini_set('display_errors', '0');
-ob_start(); // Buffer de salida — evita caracteres extra antes del JSON
+ob_start();
 
 // ── Base de datos ──────────────────────────────────────
-define('DB_HOST', 'localhost');
-define('DB_USER', 'tu_usuario_db');      // ← Cambiar
-define('DB_PASS', 'tu_contraseña_db');   // ← Cambiar
-define('DB_NAME', 'tu_base_de_datos');   // ← Cambiar
+define('DB_HOST', 'sql100.infinityfree.com');
+define('DB_USER', 'if0_41631284');
+define('DB_PASS', '87vrryT3OlM');
+define('DB_NAME', 'if0_41631284_basedatos');
 
-// ── URL del sitio (sin barra final) ───────────────────
-define('SITE_URL', 'https://tudominio.infinityfreeapp.com'); // ← Cambiar
+// ── URL del sitio ──────────────────────────────────────
+define('SITE_URL', 'https://alimcerv.infinityfreeapp.com');
 
 // ── Administrador ──────────────────────────────────────
 define('ADMIN_PHONE', '51500033');
 
 // ── Proveedor SMS ─────────────────────────────────────
-// Opciones: 'demo' (muestra el código en pantalla) | 'twilio'
+// 'demo' = muestra el código en pantalla (para pruebas)
 define('SMS_PROVIDER', 'demo');
-define('TWILIO_SID',   '');   // Twilio Account SID
-define('TWILIO_TOKEN', '');   // Twilio Auth Token
-define('TWILIO_FROM',  '');   // Número Twilio con + (ej: +15551234567)
+define('TWILIO_SID',   '');
+define('TWILIO_TOKEN', '');
+define('TWILIO_FROM',  '');
 
 // ── Sesión ─────────────────────────────────────────────
 define('SESSION_LIFETIME', 86400);   // 24 horas
 define('OTP_EXPIRY',       600);     // 10 minutos
 
 // ── Uploads ────────────────────────────────────────────
-define('MAX_FILE_SIZE',  5 * 1024 * 1024);   // 5 MB
+define('MAX_FILE_SIZE',  5 * 1024 * 1024);
 define('UPLOAD_DIR',     __DIR__ . '/uploads/');
 define('UPLOAD_URL',     SITE_URL . '/uploads/');
 
@@ -41,7 +40,6 @@ define('UPLOAD_URL',     SITE_URL . '/uploads/');
 //  FUNCIONES GLOBALES
 // ======================================================
 
-/** Conexión PDO (singleton) */
 function getDB(): PDO {
   static $pdo = null;
   if ($pdo === null) {
@@ -62,7 +60,6 @@ function getDB(): PDO {
   return $pdo;
 }
 
-/** Iniciar sesión de forma segura */
 function startSession(): void {
   if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
@@ -75,7 +72,6 @@ function startSession(): void {
   }
 }
 
-/** Usuario de la sesión actual o null */
 function getCurrentUser(): ?array {
   startSession();
   if (!empty($_SESSION['user_id'])) {
@@ -89,7 +85,6 @@ function getCurrentUser(): ?array {
   return null;
 }
 
-/** Detener si no está autenticado */
 function requireAuth(): array {
   $user = getCurrentUser();
   if (!$user) {
@@ -98,7 +93,6 @@ function requireAuth(): array {
   return $user;
 }
 
-/** Detener si no es administrador */
 function requireAdmin(): array {
   $user = requireAuth();
   if ($user['role'] !== 'admin') {
@@ -107,22 +101,19 @@ function requireAdmin(): array {
   return $user;
 }
 
-/** Respuesta JSON y termina */
 function jsonResponse(array $data, int $status = 200): void {
-  ob_clean(); // Descartar cualquier output previo (warnings, notices, etc.)
+  ob_clean();
   http_response_code($status);
   header('Content-Type: application/json; charset=utf-8');
   echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
   exit;
 }
 
-/** Cuerpo de la petición JSON */
 function getBody(): array {
   $raw = file_get_contents('php://input');
   return json_decode($raw, true) ?? [];
 }
 
-/** Registrar actividad del usuario */
 function logActivity(?int $userId, string $action, mixed $details = null): void {
   try {
     $db = getDB();
@@ -138,28 +129,22 @@ function logActivity(?int $userId, string $action, mixed $details = null): void 
       $_SERVER['HTTP_USER_AGENT'] ?? null,
     ]);
   } catch (Throwable) {
-    // El log no debe romper la app
+    // silencioso
   }
 }
 
-/** Generar y almacenar OTP */
 function createOTP(string $phone, string $purpose = 'register'): string {
   $db   = getDB();
   $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
   $exp  = date('Y-m-d H:i:s', time() + OTP_EXPIRY);
-
-  // Invalidar OTPs anteriores del mismo teléfono/propósito
   $db->prepare('UPDATE otp_codes SET used=1 WHERE phone=? AND purpose=? AND used=0')
      ->execute([$phone, $purpose]);
-
   $db->prepare(
     'INSERT INTO otp_codes (phone, code, purpose, expires_at) VALUES (?, ?, ?, ?)'
   )->execute([$phone, $code, $purpose, $exp]);
-
   return $code;
 }
 
-/** Verificar OTP (retorna true si es válido) */
 function verifyOTP(string $phone, string $code, string $purpose = 'register'): bool {
   $db   = getDB();
   $stmt = $db->prepare(
@@ -170,17 +155,14 @@ function verifyOTP(string $phone, string $code, string $purpose = 'register'): b
   $stmt->execute([$phone, $code, $purpose]);
   $row = $stmt->fetch();
   if (!$row) return false;
-
   $db->prepare('UPDATE otp_codes SET used=1 WHERE id=?')->execute([$row['id']]);
   return true;
 }
 
-/** Enviar SMS (configurable) */
 function sendSMS(string $phone, string $message): array {
   if (SMS_PROVIDER === 'twilio' && TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM) {
     return twilioSend($phone, $message);
   }
-  // Modo demo: el código se devuelve en la API
   return ['demo' => true];
 }
 
