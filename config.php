@@ -114,7 +114,7 @@ function getBody(): array {
   return json_decode($raw, true) ?? [];
 }
 
-function logActivity(?int $userId, string $action, mixed $details = null): void {
+function logActivity($userId, string $action, $details = null): void {
   try {
     $db = getDB();
     $stmt = $db->prepare(
@@ -128,7 +128,7 @@ function logActivity(?int $userId, string $action, mixed $details = null): void 
       $_SERVER['REMOTE_ADDR'] ?? null,
       $_SERVER['HTTP_USER_AGENT'] ?? null,
     ]);
-  } catch (Throwable) {
+  } catch (Exception $e) {
     // silencioso
   }
 }

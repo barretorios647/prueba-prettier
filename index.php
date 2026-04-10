@@ -69,6 +69,12 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
         <span class="badge" id="cart-count">0</span>
       </button>
 
+      <!-- Admin directo (solo visible si admin) -->
+      <button class="btn btn--sm btn--gold" id="topbar-admin-btn" type="button"
+        style="display:none" onclick="openAdmin()">
+        <i class="fas fa-shield-halved"></i> Admin
+      </button>
+
       <!-- Usuario -->
       <div class="user-menu" id="user-menu">
         <button class="icon-btn user-menu__trigger" id="user-menu-btn" type="button" aria-label="Cuenta">
@@ -434,11 +440,11 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
     <div class="modal__body">
       <form class="auth-form" id="login-form" novalidate>
         <div class="form-group">
-          <label class="form-label" for="login-phone">Número de teléfono</label>
+          <label class="form-label" for="login-email">Correo electrónico</label>
           <div class="input-wrap">
-            <i class="fas fa-phone"></i>
-            <input id="login-phone" type="tel" inputmode="numeric" placeholder="Ej: 9621234567"
-              autocomplete="tel" required />
+            <i class="fas fa-envelope"></i>
+            <input id="login-email" type="email" placeholder="correo@gmail.com"
+              autocomplete="email" required />
           </div>
         </div>
         <div class="form-group">
@@ -472,28 +478,13 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
   <div class="modal__overlay"></div>
   <div class="modal__content modal__content--auth">
     <div class="modal__header">
-      <h2 class="modal__title" id="register-modal-title">
-        <i class="fas fa-user-plus"></i> Crear Cuenta
-      </h2>
+      <h2 class="modal__title"><i class="fas fa-user-plus"></i> Crear Cuenta</h2>
       <button class="icon-btn modal__close" id="register-close" type="button" aria-label="Cerrar">
         <i class="fas fa-times"></i>
       </button>
     </div>
 
-    <!-- Indicador de pasos -->
-    <div class="step-indicator">
-      <div class="step-dot step-dot--active" id="step-dot-1">
-        <span>1</span>
-        <p>Datos</p>
-      </div>
-      <div class="step-line"></div>
-      <div class="step-dot" id="step-dot-2">
-        <span>2</span>
-        <p>Verificar</p>
-      </div>
-    </div>
-
-    <!-- Paso 1 -->
+    <!-- Paso 1: Datos -->
     <div class="modal__body" id="register-step-1">
       <form class="auth-form" id="register-form" novalidate>
         <div class="form-group">
@@ -505,11 +496,18 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="reg-phone">Número de teléfono</label>
+          <label class="form-label" for="reg-email">Correo electrónico</label>
+          <div class="input-wrap">
+            <i class="fas fa-envelope"></i>
+            <input id="reg-email" type="email" placeholder="correo@gmail.com"
+              autocomplete="email" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reg-phone">Teléfono (opcional)</label>
           <div class="input-wrap">
             <i class="fas fa-phone"></i>
-            <input id="reg-phone" type="tel" inputmode="numeric" placeholder="Ej: 9621234567"
-              autocomplete="tel" required />
+            <input id="reg-phone" type="tel" placeholder="Ej: 9621234567" autocomplete="tel" />
           </div>
         </div>
         <div class="form-group">
@@ -525,7 +523,7 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
         </div>
         <div class="form-error" id="register-error" role="alert"></div>
         <button class="btn btn--gold btn--block" type="submit" id="register-submit">
-          <i class="fas fa-paper-plane"></i> Enviar código de verificación
+          <i class="fas fa-paper-plane"></i> Crear cuenta
         </button>
         <p class="auth-switch">
           ¿Ya tienes cuenta?
@@ -534,50 +532,24 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
       </form>
     </div>
 
-    <!-- Paso 2: Verificación OTP -->
+    <!-- Paso 2: Revisa tu correo -->
     <div class="modal__body" id="register-step-2" style="display:none;">
       <div class="otp-box">
-        <div class="otp-box__icon"><i class="fas fa-mobile-alt"></i></div>
-        <h3 class="otp-box__title">Verifica tu número</h3>
+        <div class="otp-box__icon"><i class="fas fa-envelope-open-text"></i></div>
+        <h3 class="otp-box__title">¡Revisa tu correo!</h3>
         <p class="otp-box__desc">
-          Enviamos un código de <strong>6 dígitos</strong> al número<br />
-          <span id="verify-phone-display" class="otp-box__phone"></span>
+          Enviamos un enlace de verificación a<br />
+          <span id="verify-email-display" class="otp-box__phone"></span><br /><br />
+          Haz clic en el enlace del correo para activar tu cuenta.<br />
+          <small style="color:var(--text-muted)">Revisa también la carpeta de spam.</small>
         </p>
-
-        <!-- Demo mode banner -->
-        <div class="otp-demo-alert" id="otp-demo-alert" style="display:none;">
-          <i class="fas fa-info-circle"></i>
-          Modo demo — Código: <strong id="otp-demo-code"></strong>
-        </div>
-
-        <form class="auth-form" id="verify-form" novalidate>
-          <div class="form-group">
-            <label class="form-label" for="verify-code">Código de 6 dígitos</label>
-            <div class="otp-inputs" id="otp-inputs">
-              <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" />
-              <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" />
-              <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" />
-              <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" />
-              <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" />
-              <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" />
-            </div>
-            <input type="hidden" id="verify-code" />
-          </div>
-          <div class="form-error" id="verify-error" role="alert"></div>
-          <button class="btn btn--gold btn--block" type="submit" id="verify-submit">
-            <i class="fas fa-check-circle"></i> Verificar cuenta
-          </button>
-        </form>
-
-        <div class="otp-actions">
-          <button type="button" class="auth-link" id="resend-code-btn">
-            <i class="fas fa-redo"></i> Reenviar código
-          </button>
-          <span class="otp-timer" id="otp-timer">Reenviar en <span id="otp-countdown">60</span>s</span>
-          <button type="button" class="auth-link" id="back-to-register">
-            <i class="fas fa-arrow-left"></i> Volver
-          </button>
-        </div>
+        <button class="btn btn--outline-gold btn--block" id="back-to-register" type="button">
+          <i class="fas fa-arrow-left"></i> Volver
+        </button>
+        <p class="auth-switch" style="margin-top:1rem">
+          ¿Ya verificaste?
+          <button type="button" class="auth-link" id="go-login-after-verify">Inicia sesión</button>
+        </p>
       </div>
     </div>
   </div>
@@ -899,6 +871,7 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
 ══════════════════════════════════════════ -->
 <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="false"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js" defer></script>
 </body>
 </html>

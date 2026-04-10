@@ -1,9 +1,14 @@
 /* =====================================================
    H & L ALIMCERV Group — Frontend App
-   PHP + MySQL backend (InfinityFree)
+   Supabase Auth + PHP/MySQL backend (InfinityFree)
    ===================================================== */
 
 'use strict';
+
+// ── Supabase ──────────────────────────────────────────
+const SUPABASE_URL = 'https://nvovudpxxotffretvkso.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_LVe064mBPCraflH9NzgGVg_hzn1YFIO';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Constantes ────────────────────────────────────────
 const WA_NUMBER = '529621643422';
@@ -102,6 +107,8 @@ function updateAuthUI() {
     if (isAdmin) {
       document.getElementById('drawer-admin-btn').style.display = 'flex';
       document.getElementById('dd-admin') && (document.getElementById('dd-admin').style.display = 'flex');
+      const topbarAdmin = document.getElementById('topbar-admin-btn');
+      if (topbarAdmin) topbarAdmin.style.display = 'flex';
     }
   } else {
     userMenu.style.display = 'none';
@@ -114,88 +121,91 @@ function updateAuthUI() {
   }
 }
 
-async function doLogin(phone, password) {
+// ── Sync Supabase → PHP session ───────────────────────
+async function syncWithPHP(sbUser) {
+  const meta  = sbUser.user_metadata || {};
+  const { user } = await apiFetch(`${API.auth}?action=supabase_sync`, {
+    method: 'POST',
+    body: {
+      supabase_id: sbUser.id,
+      email:       sbUser.email,
+      name:        meta.name  || meta.full_name || '',
+      phone:       meta.phone || '',
+    },
+  });
+  return user;
+}
+
+async function doLogin(email, password) {
   const btn = document.getElementById('login-submit');
   const err = document.getElementById('login-error');
   setLoading(btn, true); err.textContent = '';
   try {
-    const { user } = await apiFetch(`${API.auth}?action=login`, { method: 'POST', body: { phone, password } });
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(
+      error.message === 'Invalid login credentials'
+        ? 'Correo o contraseña incorrectos.'
+        : error.message === 'Email not confirmed'
+        ? 'Debes confirmar tu correo antes de entrar. Revisa tu bandeja de entrada.'
+        : error.message
+    );
+    const user = await syncWithPHP(data.user);
     state.user = user;
-    updateAuthUI();
     closeAllModals();
     toast(`¡Bienvenido, ${user.name.split(' ')[0]}!`, 'success');
-    if (user.role === 'admin') loadAdminDashboard();
+    setTimeout(() => window.location.reload(), 800);
   } catch (e) { err.textContent = e.message; }
   finally { setLoading(btn, false); }
 }
 
-async function doRegister(name, phone, password) {
+async function doRegister(name, email, phone, password) {
   const btn = document.getElementById('register-submit');
   const err = document.getElementById('register-error');
   setLoading(btn, true); err.textContent = '';
   try {
-    const data = await apiFetch(`${API.auth}?action=register`, { method: 'POST', body: { name, phone, password } });
-    state.otpPhone = phone;
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, phone },
+        emailRedirectTo: 'https://alimcerv.infinityfreeapp.com',
+      },
+    });
+    if (error) throw new Error(error.message);
 
-    // Paso 2: OTP
+    // Mostrar paso 2: revisar correo
     document.getElementById('register-step-1').style.display = 'none';
     document.getElementById('register-step-2').style.display = 'block';
-    document.getElementById('verify-phone-display').textContent = phone;
-    document.getElementById('step-dot-1').classList.remove('step-dot--active');
-    document.getElementById('step-dot-1').classList.add('step-dot--done');
-    document.getElementById('step-dot-2').classList.add('step-dot--active');
-    document.querySelector('.step-dot-1 span') && (document.getElementById('step-dot-1').querySelector('span').innerHTML = '<i class="fas fa-check"></i>');
-
-    if (data.demo_code) {
-      document.getElementById('otp-demo-alert').style.display = 'flex';
-      document.getElementById('otp-demo-code').textContent = data.demo_code;
-    }
-    startOtpTimer();
-    document.querySelectorAll('.otp-digit')[0]?.focus();
-  } catch (e) { err.textContent = e.message; }
-  finally { setLoading(btn, false); }
-}
-
-async function doVerifyOtp(code) {
-  const btn = document.getElementById('verify-submit');
-  const err = document.getElementById('verify-error');
-  setLoading(btn, true); err.textContent = '';
-  try {
-    const { user } = await apiFetch(`${API.auth}?action=verify_otp`, {
-      method: 'POST', body: { phone: state.otpPhone, code },
-    });
-    state.user = user;
-    updateAuthUI();
-    closeAllModals();
-    toast('¡Cuenta verificada! Bienvenido.', 'success');
+    document.getElementById('verify-email-display').textContent = email;
   } catch (e) { err.textContent = e.message; }
   finally { setLoading(btn, false); }
 }
 
 async function doLogout() {
+  await sb.auth.signOut().catch(() => {});
   await apiFetch(`${API.auth}?action=logout`, { method: 'POST' }).catch(() => {});
   state.user = null;
   updateAuthUI();
   closeAdmin();
   toast('Sesión cerrada.', 'info');
+  setTimeout(() => window.location.reload(), 600);
 }
 
-function startOtpTimer() {
-  if (state.otpTimer) clearInterval(state.otpTimer);
-  let seconds = 60;
-  const timerEl    = document.getElementById('otp-timer');
-  const countEl    = document.getElementById('otp-countdown');
-  const resendBtn  = document.getElementById('resend-code-btn');
-  timerEl.style.display = 'inline'; resendBtn.style.display = 'none';
-  state.otpTimer = setInterval(() => {
-    seconds--;
-    if (countEl) countEl.textContent = seconds;
-    if (seconds <= 0) {
-      clearInterval(state.otpTimer);
-      timerEl.style.display = 'none';
-      resendBtn.style.display = 'inline';
-    }
-  }, 1000);
+// ── Detectar verificación de email al volver al sitio ─
+async function checkSupabaseSession() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session && !state.user) {
+    try {
+      const user = await syncWithPHP(session.user);
+      state.user = user;
+      updateAuthUI();
+      if (window.location.hash.includes('type=signup')) {
+        toast('¡Cuenta verificada! Ya puedes usar el sitio.', 'success');
+        history.replaceState(null, '', window.location.pathname);
+        setTimeout(() => window.location.reload(), 1000);
+      }
+    } catch (e) { console.error('Sync error:', e); }
+  }
 }
 
 // OTP digit inputs
@@ -812,8 +822,10 @@ document.addEventListener('DOMContentLoaded', () => {
   loadProducts();
   updateCartBadge();
   updateAuthUI();
-  initOtpInputs();
   initPasswordToggles();
+
+  // Verificar sesión Supabase (ej: cuando vuelve del link de email)
+  checkSupabaseSession();
 
   // ── Topbar scroll ─────────────────────────────────
   window.addEventListener('scroll', () => {
@@ -895,7 +907,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Login form ────────────────────────────────────
   document.getElementById('login-form').addEventListener('submit', e => {
     e.preventDefault();
-    doLogin(document.getElementById('login-phone').value.trim(), document.getElementById('login-password').value);
+    doLogin(
+      document.getElementById('login-email').value.trim(),
+      document.getElementById('login-password').value,
+    );
   });
 
   // ── Register form ─────────────────────────────────
@@ -903,36 +918,22 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     doRegister(
       document.getElementById('reg-name').value.trim(),
+      document.getElementById('reg-email').value.trim(),
       document.getElementById('reg-phone').value.trim(),
       document.getElementById('reg-password').value,
     );
   });
 
-  // ── Verify OTP form ───────────────────────────────
-  document.getElementById('verify-form').addEventListener('submit', e => {
-    e.preventDefault();
-    const code = document.getElementById('verify-code').value;
-    if (code.length !== 6) { document.getElementById('verify-error').textContent = 'Ingresa los 6 dígitos.'; return; }
-    doVerifyOtp(code);
-  });
+  // ── Volver al paso 1 ──────────────────────────────
   document.getElementById('back-to-register').addEventListener('click', () => {
     document.getElementById('register-step-2').style.display = 'none';
     document.getElementById('register-step-1').style.display = 'block';
-    document.getElementById('step-dot-2').classList.remove('step-dot--active');
-    document.getElementById('step-dot-1').classList.remove('step-dot--done');
-    document.getElementById('step-dot-1').classList.add('step-dot--active');
   });
-  document.getElementById('resend-code-btn').addEventListener('click', async () => {
-    if (!state.otpPhone) return;
-    try {
-      const data = await apiFetch(`${API.auth}?action=resend_otp`, { method: 'POST', body: { phone: state.otpPhone } });
-      if (data.demo_code) {
-        document.getElementById('otp-demo-alert').style.display = 'flex';
-        document.getElementById('otp-demo-code').textContent = data.demo_code;
-      }
-      startOtpTimer();
-      toast('Código reenviado.', 'info');
-    } catch (e) { toast(e.message, 'error'); }
+
+  // ── Ir a login después de verificar ───────────────
+  document.getElementById('go-login-after-verify')?.addEventListener('click', () => {
+    closeModal('register-modal');
+    openModal('login-modal');
   });
 
   // ── User menu dropdown ────────────────────────────

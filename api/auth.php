@@ -1,7 +1,7 @@
 <?php
 /* =====================================================
    H & L ALIMCERV — API Auth
-   POST ?action=register | verify_otp | login | logout | resend_otp
+   POST ?action=supabase_sync | logout | admin_login
    GET  ?action=me
    ===================================================== */
 
@@ -12,81 +12,67 @@ $body   = getBody();
 
 switch ($action) {
 
-  // ── Registro ──────────────────────────────────────
-  case 'register':
-    $name  = trim($body['name']  ?? '');
-    $phone = trim($body['phone'] ?? '');
-    $pass  = trim($body['password'] ?? '');
+  // ── Sync usuario de Supabase con PHP session ───────
+  // Llamado después de login/registro exitoso en Supabase
+  case 'supabase_sync':
+    $supabaseId = trim($body['supabase_id'] ?? '');
+    $email      = trim($body['email']       ?? '');
+    $name       = trim($body['name']        ?? '');
+    $phone      = trim($body['phone']       ?? '');
 
-    if (!$name || !$phone || !$pass) {
-      jsonResponse(['error' => 'Todos los campos son requeridos.'], 422);
-    }
-    if (!preg_match('/^\d{7,15}$/', $phone)) {
-      jsonResponse(['error' => 'Número de teléfono inválido (solo dígitos, 7-15).'], 422);
-    }
-    if (strlen($pass) < 6) {
-      jsonResponse(['error' => 'La contraseña debe tener al menos 6 caracteres.'], 422);
+    if (!$supabaseId || !$email) {
+      jsonResponse(['error' => 'Datos de Supabase inválidos.'], 422);
     }
 
     $db = getDB();
-    $existing = $db->prepare('SELECT id, is_verified FROM users WHERE phone=? LIMIT 1');
-    $existing->execute([$phone]);
-    $user = $existing->fetch();
 
-    if ($user && $user['is_verified']) {
-      jsonResponse(['error' => 'Este número ya está registrado.'], 409);
-    }
+    // Buscar usuario por supabase_id o email
+    $stmt = $db->prepare(
+      'SELECT * FROM users WHERE supabase_id=? OR email=? LIMIT 1'
+    );
+    $stmt->execute([$supabaseId, $email]);
+    $user = $stmt->fetch();
 
-    // Crear o actualizar usuario no verificado
-    $hash = password_hash($pass, PASSWORD_BCRYPT, ['cost' => 12]);
-    if ($user && !$user['is_verified']) {
-      $db->prepare('UPDATE users SET name=?, password_hash=? WHERE phone=?')
-         ->execute([$name, $hash, $phone]);
+    if (!$user) {
+      // Crear nuevo usuario
+      $role = ($phone === ADMIN_PHONE) ? 'admin' : 'user';
+      $db->prepare(
+        'INSERT INTO users (name, phone, email, supabase_id, password_hash, role, is_verified)
+         VALUES (?, ?, ?, ?, ?, ?, 1)'
+      )->execute([$name ?: 'Usuario', $phone, $email, $supabaseId,
+                  password_hash(uniqid('', true), PASSWORD_BCRYPT), $role]);
+      $userId = (int)$db->lastInsertId();
     } else {
-      $db->prepare('INSERT INTO users (name, phone, password_hash) VALUES (?,?,?)')
-         ->execute([$name, $phone, $hash]);
+      $userId = (int)$user['id'];
+      $role   = $user['role'];
+      // Sincronizar supabase_id y email si faltan
+      $db->prepare(
+        'UPDATE users SET supabase_id=?, email=?, is_verified=1, last_login=NOW() WHERE id=?'
+      )->execute([$supabaseId, $email, $userId]);
+      // Actualizar nombre/teléfono si vinieron vacíos
+      if ($name && !$user['name']) {
+        $db->prepare('UPDATE users SET name=? WHERE id=?')->execute([$name, $userId]);
+      }
+      if ($phone && !$user['phone']) {
+        $db->prepare('UPDATE users SET phone=? WHERE id=?')->execute([$phone, $userId]);
+      }
     }
 
-    $code   = createOTP($phone, 'register');
-    $smsRes = sendSMS($phone, "Tu código H&L ALIMCERV: $code. Válido 10 min.");
-    logActivity(null, 'register_attempt', ['phone' => $phone]);
+    // Obtener datos actualizados
+    $stmt = $db->prepare('SELECT * FROM users WHERE id=? LIMIT 1');
+    $stmt->execute([$userId]);
+    $userData = $stmt->fetch();
 
-    $response = ['success' => true, 'message' => 'Código enviado.'];
-    if (isset($smsRes['demo'])) {
-      $response['demo_code'] = $code; // Solo en modo demo
-    }
-    jsonResponse($response);
-
-  // ── Verificar OTP ─────────────────────────────────
-  case 'verify_otp':
-    $phone = trim($body['phone'] ?? '');
-    $code  = trim($body['code']  ?? '');
-
-    if (!$phone || !$code) {
-      jsonResponse(['error' => 'Teléfono y código son requeridos.'], 422);
-    }
-
-    if (!verifyOTP($phone, $code, 'register')) {
-      jsonResponse(['error' => 'Código inválido o expirado.'], 400);
-    }
-
-    $db   = getDB();
-    $stmt = $db->prepare('UPDATE users SET is_verified=1 WHERE phone=?');
-    $stmt->execute([$phone]);
-
-    $user = $db->prepare('SELECT id, name, phone, role FROM users WHERE phone=? LIMIT 1');
-    $user->execute([$phone]);
-    $userData = $user->fetch();
-
+    // Crear sesión PHP
     startSession();
     session_regenerate_id(true);
     $_SESSION['user_id']    = $userData['id'];
     $_SESSION['user_name']  = $userData['name'];
     $_SESSION['user_phone'] = $userData['phone'];
     $_SESSION['user_role']  = $userData['role'];
+    $_SESSION['user_email'] = $userData['email'];
 
-    $db->prepare('UPDATE users SET last_login=NOW() WHERE id=?')->execute([$userData['id']]);
-    logActivity($userData['id'], 'verify_otp_success', ['phone' => $phone]);
+    logActivity($userId, 'supabase_login', ['email' => $email]);
 
     jsonResponse([
       'success' => true,
@@ -94,13 +80,14 @@ switch ($action) {
         'id'    => $userData['id'],
         'name'  => $userData['name'],
         'phone' => $userData['phone'],
+        'email' => $userData['email'],
         'role'  => $userData['role'],
       ],
     ]);
 
-  // ── Login ─────────────────────────────────────────
-  case 'login':
-    $phone = trim($body['phone'] ?? '');
+  // ── Login admin por teléfono (solo admin) ──────────
+  case 'admin_login':
+    $phone = trim($body['phone']    ?? '');
     $pass  = trim($body['password'] ?? '');
 
     if (!$phone || !$pass) {
@@ -108,16 +95,12 @@ switch ($action) {
     }
 
     $db   = getDB();
-    $stmt = $db->prepare('SELECT * FROM users WHERE phone=? LIMIT 1');
+    $stmt = $db->prepare('SELECT * FROM users WHERE phone=? AND role="admin" LIMIT 1');
     $stmt->execute([$phone]);
     $user = $stmt->fetch();
 
     if (!$user || !password_verify($pass, $user['password_hash'])) {
-      logActivity(null, 'login_failed', ['phone' => $phone]);
-      jsonResponse(['error' => 'Teléfono o contraseña incorrectos.'], 401);
-    }
-    if (!$user['is_verified']) {
-      jsonResponse(['error' => 'Cuenta no verificada. Regístrate para obtener el código.'], 403);
+      jsonResponse(['error' => 'Credenciales incorrectas.'], 401);
     }
 
     startSession();
@@ -128,7 +111,7 @@ switch ($action) {
     $_SESSION['user_role']  = $user['role'];
 
     $db->prepare('UPDATE users SET last_login=NOW() WHERE id=?')->execute([$user['id']]);
-    logActivity($user['id'], 'login_success', ['phone' => $phone]);
+    logActivity($user['id'], 'admin_login', ['phone' => $phone]);
 
     jsonResponse([
       'success' => true,
@@ -136,6 +119,7 @@ switch ($action) {
         'id'    => $user['id'],
         'name'  => $user['name'],
         'phone' => $user['phone'],
+        'email' => $user['email'] ?? '',
         'role'  => $user['role'],
       ],
     ]);
@@ -151,28 +135,7 @@ switch ($action) {
   // ── Usuario actual ────────────────────────────────
   case 'me':
     $user = getCurrentUser();
-    if (!$user) jsonResponse(['user' => null]);
     jsonResponse(['user' => $user]);
-
-  // ── Reenviar OTP ──────────────────────────────────
-  case 'resend_otp':
-    $phone = trim($body['phone'] ?? '');
-    if (!$phone) jsonResponse(['error' => 'Teléfono requerido.'], 422);
-
-    $db   = getDB();
-    $stmt = $db->prepare('SELECT id FROM users WHERE phone=? AND is_verified=0 LIMIT 1');
-    $stmt->execute([$phone]);
-    if (!$stmt->fetch()) {
-      jsonResponse(['error' => 'Teléfono no encontrado o ya verificado.'], 404);
-    }
-
-    $code   = createOTP($phone, 'register');
-    $smsRes = sendSMS($phone, "Tu código H&L ALIMCERV: $code. Válido 10 min.");
-    logActivity(null, 'resend_otp', ['phone' => $phone]);
-
-    $response = ['success' => true, 'message' => 'Código reenviado.'];
-    if (isset($smsRes['demo'])) $response['demo_code'] = $code;
-    jsonResponse($response);
 
   default:
     jsonResponse(['error' => 'Acción no válida.'], 400);
