@@ -4,6 +4,11 @@
    Edita las constantes DB_* antes de subir a InfinityFree
    ===================================================== */
 
+// Suprimir errores/warnings para que no rompan el JSON
+error_reporting(0);
+ini_set('display_errors', '0');
+ob_start(); // Buffer de salida — evita caracteres extra antes del JSON
+
 // ── Base de datos ──────────────────────────────────────
 define('DB_HOST', 'localhost');
 define('DB_USER', 'tu_usuario_db');      // ← Cambiar
@@ -104,6 +109,7 @@ function requireAdmin(): array {
 
 /** Respuesta JSON y termina */
 function jsonResponse(array $data, int $status = 200): void {
+  ob_clean(); // Descartar cualquier output previo (warnings, notices, etc.)
   http_response_code($status);
   header('Content-Type: application/json; charset=utf-8');
   echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
