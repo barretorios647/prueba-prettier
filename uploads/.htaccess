@@ -1,0 +1,5 @@
+# Prevenir ejecución de scripts en uploads
+Options -Indexes
+<FilesMatch "\.(php|php3|php4|php5|phtml|pl|py|cgi|sh)$">
+  Deny from all
+</FilesMatch>
