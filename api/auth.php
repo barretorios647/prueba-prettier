@@ -7,8 +7,21 @@
 
 require_once __DIR__ . '/../config.php';
 
-$action = $_GET['action'] ?? $_POST['action'] ?? '';
 $body   = getBody();
+$action = $_GET['action'] ?? $_POST['action'] ?? $body['action'] ?? '';
+
+// DEBUG TEMPORAL — eliminar después
+if (isset($_GET['debug'])) {
+  jsonResponse([
+    'GET'    => $_GET,
+    'POST'   => $_POST,
+    'body'   => $body,
+    'action' => $action,
+    'raw'    => file_get_contents('php://input') ?: '(vacío)',
+    'method' => $_SERVER['REQUEST_METHOD'],
+    'ct'     => $_SERVER['CONTENT_TYPE'] ?? 'no content-type',
+  ]);
+}
 
 switch ($action) {
 
@@ -35,7 +48,7 @@ switch ($action) {
 
     if (!$user) {
       // Crear nuevo usuario
-      $role = ($phone === ADMIN_PHONE) ? 'admin' : 'user';
+      $role = in_array($phone, ADMIN_PHONES) ? 'admin' : 'user';
       $db->prepare(
         'INSERT INTO users (name, phone, email, supabase_id, password_hash, role, is_verified)
          VALUES (?, ?, ?, ?, ?, ?, 1)'

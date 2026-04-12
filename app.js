@@ -5,6 +5,25 @@
 
 'use strict';
 
+// ── Settings (early — no flash) ────────────────────────
+const SETTINGS_KEY     = 'hl_settings';
+const DEFAULT_SETTINGS = { theme:'dark', accent:'gold', radius:'default', fontsize:'medium', animations:true };
+(function earlyTheme() {
+  try {
+    const s = { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+    const root = document.documentElement;
+    let effectiveTheme = s.theme;
+    if (s.theme === 'auto') {
+      effectiveTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    root.setAttribute('data-theme',      effectiveTheme);
+    root.setAttribute('data-accent',     s.accent);
+    root.setAttribute('data-radius',     s.radius);
+    root.setAttribute('data-fontsize',   s.fontsize);
+    root.setAttribute('data-animations', s.animations ? 'on' : 'off');
+  } catch {}
+})();
+
 // ── Supabase ──────────────────────────────────────────
 const SUPABASE_URL = 'https://nvovudpxxotffretvkso.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LVe064mBPCraflH9NzgGVg_hzn1YFIO';
@@ -36,13 +55,18 @@ const state = {
 // ══════════════════════════════════════════
 
 async function apiFetch(url, options = {}) {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-    body: options.body && typeof options.body === 'object'
-      ? JSON.stringify(options.body)
-      : options.body,
-  });
+  const isPost = options.method === 'POST';
+  const fetchOpts = { ...options };
+
+  if (isPost && options.body && typeof options.body === 'object') {
+    // Use form-encoded — InfinityFree blocks php://input but passes $_POST
+    fetchOpts.headers = { 'Content-Type': 'application/x-www-form-urlencoded', ...options.headers };
+    fetchOpts.body = new URLSearchParams(options.body).toString();
+  } else {
+    fetchOpts.headers = { 'Content-Type': 'application/json', ...options.headers };
+  }
+
+  const res = await fetch(url, fetchOpts);
   const data = await res.json();
   if (!res.ok && data.error) throw new Error(data.error);
   return data;
@@ -123,17 +147,22 @@ function updateAuthUI() {
 
 // ── Sync Supabase → PHP session ───────────────────────
 async function syncWithPHP(sbUser) {
-  const meta  = sbUser.user_metadata || {};
-  const { user } = await apiFetch(`${API.auth}?action=supabase_sync`, {
-    method: 'POST',
-    body: {
-      supabase_id: sbUser.id,
-      email:       sbUser.email,
-      name:        meta.name  || meta.full_name || '',
-      phone:       meta.phone || '',
-    },
+  const meta = sbUser.user_metadata || {};
+  const params = new URLSearchParams({
+    action:      'supabase_sync',
+    supabase_id: sbUser.id,
+    email:       sbUser.email,
+    name:        meta.name || meta.full_name || '',
+    phone:       meta.phone || '',
   });
-  return user;
+  const res = await fetch(`${API.auth}?action=supabase_sync`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    params.toString(),
+  });
+  const data = await res.json();
+  if (!res.ok && data.error) throw new Error(data.error);
+  return data.user;
 }
 
 async function doLogin(email, password) {
@@ -183,7 +212,7 @@ async function doRegister(name, email, phone, password) {
 
 async function doLogout() {
   await sb.auth.signOut().catch(() => {});
-  await apiFetch(`${API.auth}?action=logout`, { method: 'POST' }).catch(() => {});
+  await fetch(`${API.auth}?action=logout`, { method: 'POST' }).catch(() => {});
   state.user = null;
   updateAuthUI();
   closeAdmin();
@@ -364,11 +393,12 @@ function renderProducts() {
   }
   noResult.style.display = 'none';
 
-  grid.innerHTML = list.map(p => {
+  grid.innerHTML = list.map((p, i) => {
     const badgeClass = p.badge?.toLowerCase() === 'oferta' ? 'producto__badge--sale'
       : p.badge?.toLowerCase() === 'popular' ? 'producto__badge--popular' : '';
+    const delay = Math.min(i * 55, 440);
     return `
-    <article class="producto" data-id="${p.id}">
+    <article class="producto" data-id="${p.id}" style="--card-delay:${delay}ms">
       <div class="producto__img-wrap">
         ${p.badge ? `<span class="producto__badge ${badgeClass}">${escHtml(p.badge)}</span>` : ''}
         <img src="${escHtml(p.image)}" alt="${escHtml(p.name)}" loading="lazy" onerror="this.src='img/arroz.jpg'" />
@@ -603,13 +633,18 @@ async function toggleProduct(id, current) {
 }
 
 async function deleteProduct(id, name) {
-  if (!confirm(`¿Eliminar "${name}"?`)) return;
-  try {
-    await apiFetch(`${API.products}?action=delete`, { method: 'POST', body: { id } });
-    toast('Producto eliminado.', 'success');
-    loadAdminProducts();
-    loadProducts();
-  } catch (e) { toast(e.message, 'error'); }
+  confirmDialog(
+    'Eliminar producto',
+    `¿Eliminar <strong>${escHtml(name)}</strong>? Esta acción no se puede deshacer.`,
+    async () => {
+      try {
+        await apiFetch(`${API.products}?action=delete`, { method: 'POST', body: { id } });
+        toast('Producto eliminado.', 'success');
+        loadAdminProducts();
+        loadProducts();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+  );
 }
 
 async function submitProductForm(e) {
@@ -774,12 +809,17 @@ async function viewUserDetail(id) {
 }
 
 async function deleteUser(id, name) {
-  if (!confirm(`¿Eliminar al usuario "${name}"? Esta acción no se puede deshacer.`)) return;
-  try {
-    await apiFetch(`${API.admin}?action=delete_user`, { method: 'POST', body: { id } });
-    toast('Usuario eliminado.', 'success');
-    loadAdminUsers();
-  } catch (e) { toast(e.message, 'error'); }
+  confirmDialog(
+    'Eliminar usuario',
+    `¿Eliminar a <strong>${escHtml(name)}</strong>? Esta acción no se puede deshacer.`,
+    async () => {
+      try {
+        await apiFetch(`${API.admin}?action=delete_user`, { method: 'POST', body: { id } });
+        toast('Usuario eliminado.', 'success');
+        loadAdminUsers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+  );
 }
 
 // ── Admin: Actividad ──────────────────────────────────
@@ -815,14 +855,19 @@ function statusLabel(s) {
 
 document.addEventListener('DOMContentLoaded', () => {
 
+  // ── Splash screen ─────────────────────────────────
+  initSplash();
+
   // Año en footer
   document.getElementById('year').textContent = new Date().getFullYear();
 
   // Cargar productos y estado inicial
   loadProducts();
+  loadTopStrip();
   updateCartBadge();
   updateAuthUI();
   initPasswordToggles();
+  initCarousel();
 
   // Verificar sesión Supabase (ej: cuando vuelve del link de email)
   checkSupabaseSession();
@@ -1026,4 +1071,347 @@ document.addEventListener('DOMContentLoaded', () => {
       closeDrawer();
     }
   });
+
+  // ── Scroll reveal ─────────────────────────────────
+  initScrollReveal();
+
+  // ── Ripple effect on buttons ──────────────────────
+  initRipple();
+
+  // ── Shine on product cards (mouse tracking) ───────
+  initCardShine();
+
+  // ── Admin bottom nav sync ─────────────────────────
+  initAdminBottomNav();
+
+  // ── Settings panel ────────────────────────────────
+  initSettings();
 });
+
+// ══════════════════════════════════════════
+//  PREMIUM UI ENHANCEMENTS
+// ══════════════════════════════════════════
+
+function initScrollReveal() {
+  const selectors = '.reveal, .stagger-children, .section__head, .stats-bar__inner, .cta-banner__inner';
+  const els = document.querySelectorAll(selectors);
+  if (!window.IntersectionObserver) {
+    els.forEach(el => el.classList.add('visible'));
+    return;
+  }
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const el = entry.target;
+      el.classList.add('visible');
+      // For stagger-children, animate each child with delay
+      if (el.classList.contains('stagger-children')) {
+        [...el.children].forEach((child, i) => {
+          child.style.transitionDelay = `${i * 80}ms`;
+          child.style.opacity = '1';
+          child.style.transform = 'none';
+        });
+      }
+      obs.unobserve(el);
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -30px 0px' });
+  els.forEach(el => obs.observe(el));
+}
+
+function initRipple() {
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.btn');
+    if (!btn || btn.disabled) return;
+    const rect = btn.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 2;
+    const x = e.clientX - rect.left - size / 2;
+    const y = e.clientY - rect.top  - size / 2;
+    const ripple = document.createElement('span');
+    ripple.className = 'ripple';
+    ripple.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`;
+    btn.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 600);
+  });
+}
+
+function initCardShine() {
+  document.addEventListener('mousemove', e => {
+    const card = e.target.closest('.producto');
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width  * 100).toFixed(1);
+    const y = ((e.clientY - rect.top)  / rect.height * 100).toFixed(1);
+    card.style.setProperty('--shine-x', `${x}%`);
+    card.style.setProperty('--shine-y', `${y}%`);
+  });
+}
+
+// Premium confirm dialog (replaces browser confirm)
+function confirmDialog(title, msg, onConfirm) {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-dialog-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-dialog">
+      <div class="confirm-dialog__icon"><i class="fas fa-exclamation-triangle"></i></div>
+      <p class="confirm-dialog__title">${title}</p>
+      <p class="confirm-dialog__msg">${msg}</p>
+      <div class="confirm-dialog__actions">
+        <button class="btn btn--ghost" id="cd-cancel">Cancelar</button>
+        <button class="btn btn--danger" id="cd-confirm"><i class="fas fa-trash"></i> Eliminar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cd-cancel').onclick  = () => overlay.remove();
+  overlay.querySelector('#cd-confirm').onclick = () => { overlay.remove(); onConfirm(); };
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+function initAdminBottomNav() {
+  const nav = document.getElementById('admin-bottom-nav');
+  if (!nav) return;
+  nav.querySelectorAll('.admin-bottom-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.admin-nav-btn, .admin-bottom-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelector(`.admin-nav-btn[data-tab="${tab}"]`)?.classList.add('active');
+      document.getElementById(`tab-${tab}`)?.classList.add('active');
+      // Load data
+      if (tab === 'dashboard') loadAdminDashboard();
+      if (tab === 'productos') loadAdminProducts();
+      if (tab === 'pedidos')   loadAdminOrders();
+      if (tab === 'usuarios')  loadAdminUsers();
+      if (tab === 'actividad') loadAdminActivity();
+    });
+  });
+}
+
+// ── Scroll to products ────────────────────────────────
+function scrollToProducts() {
+  document.getElementById('productos-section')?.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ══════════════════════════════════════════
+//  SPLASH SCREEN
+// ══════════════════════════════════════════
+function initSplash() {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+
+  // Already seen in this session? hide fast
+  if (sessionStorage.getItem('hl_splash_done')) {
+    splash.classList.add('hidden');
+    document.body.classList.add('page-loaded');
+    return;
+  }
+
+  const fill = document.getElementById('splash-fill');
+  let prog = 0;
+  const interval = setInterval(() => {
+    prog = Math.min(prog + Math.random() * 18 + 4, 95);
+    if (fill) fill.style.width = prog + '%';
+  }, 80);
+
+  const hide = () => {
+    clearInterval(interval);
+    if (fill) fill.style.width = '100%';
+    setTimeout(() => {
+      splash.classList.add('hidden');
+      document.body.classList.add('page-loaded');
+      sessionStorage.setItem('hl_splash_done', '1');
+    }, 300);
+  };
+
+  // Hide after fonts + 1.4s minimum
+  Promise.all([
+    document.fonts?.ready || Promise.resolve(),
+    new Promise(r => setTimeout(r, 1400)),
+  ]).then(hide);
+}
+
+// ══════════════════════════════════════════
+//  CARRUSEL / BANNER
+// ══════════════════════════════════════════
+function initCarousel() {
+  const track = document.getElementById('carousel-track');
+  const dots  = document.querySelectorAll('.carousel__dot');
+  if (!track || !dots.length) return;
+
+  let current = 0;
+  const total = dots.length;
+  let timer;
+
+  function goTo(n) {
+    current = (n + total) % total;
+    track.style.transform = `translateX(-${current * 100}%)`;
+    dots.forEach((d, i) => d.classList.toggle('active', i === current));
+  }
+
+  function next() { goTo(current + 1); }
+
+  function startAuto() {
+    clearInterval(timer);
+    timer = setInterval(next, 4500);
+  }
+
+  dots.forEach((dot, i) => dot.addEventListener('click', () => { goTo(i); startAuto(); }));
+  document.getElementById('carousel-prev')?.addEventListener('click', () => { goTo(current - 1); startAuto(); });
+  document.getElementById('carousel-next')?.addEventListener('click', () => { goTo(current + 1); startAuto(); });
+
+  // Touch swipe
+  let touchX = 0;
+  track.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+  track.addEventListener('touchend', e => {
+    const diff = touchX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) { diff > 0 ? next() : goTo(current - 1); startAuto(); }
+  }, { passive: true });
+
+  startAuto();
+}
+
+// ══════════════════════════════════════════
+//  TOP STRIP (más comprados)
+// ══════════════════════════════════════════
+async function loadTopStrip() {
+  const el = document.getElementById('top-strip-scroll');
+  if (!el) return;
+  try {
+    const { products } = await apiFetch(`${API.products}?action=list&limit=10`);
+    if (!products?.length) { el.closest('.top-strip')?.remove(); return; }
+    // Show first 8 sorted by featured/price
+    const top = [...products].sort((a, b) => b.is_featured - a.is_featured).slice(0, 8);
+    el.innerHTML = top.map(p => `
+      <button class="top-chip" onclick="scrollToProducts()" type="button">
+        <img src="${escHtml(p.image)}" alt="${escHtml(p.name)}" onerror="this.style.display='none'" />
+        ${escHtml(p.name.length > 18 ? p.name.slice(0,18) + '…' : p.name)}
+        <span style="color:var(--gold);font-weight:700">${fmt(p.price)}</span>
+      </button>
+    `).join('');
+  } catch {
+    el.closest('.top-strip')?.remove();
+  }
+}
+
+// ══════════════════════════════════════════
+//  SETTINGS PANEL
+// ══════════════════════════════════════════
+
+function loadSettings() {
+  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
+  catch { return { ...DEFAULT_SETTINGS }; }
+}
+
+function saveSettings(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+function applySettings(s) {
+  const root = document.documentElement;
+
+  // Theme: dark/light/auto
+  let effectiveTheme = s.theme;
+  if (s.theme === 'auto') {
+    effectiveTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  root.setAttribute('data-theme', effectiveTheme);
+
+  root.setAttribute('data-accent',    s.accent);
+  root.setAttribute('data-radius',    s.radius);
+  root.setAttribute('data-fontsize',  s.fontsize);
+  root.setAttribute('data-animations', s.animations ? 'on' : 'off');
+}
+
+function syncSettingsUI(s) {
+  document.querySelectorAll('.mode-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === s.theme));
+  document.querySelectorAll('.color-swatch').forEach(b =>
+    b.classList.toggle('active', b.dataset.accent === s.accent));
+  document.querySelectorAll('.radius-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.radius === s.radius));
+  document.querySelectorAll('.font-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.size === s.fontsize));
+  const toggle = document.getElementById('toggle-animations');
+  if (toggle) toggle.checked = s.animations;
+}
+
+function initSettings() {
+  const panel   = document.getElementById('settings-panel');
+  const backdrop= document.getElementById('settings-backdrop');
+  if (!panel) return;
+
+  // Apply saved settings on load
+  const s = loadSettings();
+  applySettings(s);
+  syncSettingsUI(s);
+
+  // Open/close
+  document.getElementById('open-settings')?.addEventListener('click', () => {
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+  });
+  const close = () => {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  };
+  document.getElementById('close-settings')?.addEventListener('click', close);
+  backdrop?.addEventListener('click', close);
+
+  // Mode buttons
+  panel.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cur = loadSettings();
+      cur.theme = btn.dataset.mode;
+      saveSettings(cur); applySettings(cur); syncSettingsUI(cur);
+    });
+  });
+
+  // Color swatches
+  panel.querySelectorAll('.color-swatch').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cur = loadSettings();
+      cur.accent = btn.dataset.accent;
+      saveSettings(cur); applySettings(cur); syncSettingsUI(cur);
+    });
+  });
+
+  // Radius buttons
+  panel.querySelectorAll('.radius-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cur = loadSettings();
+      cur.radius = btn.dataset.radius;
+      saveSettings(cur); applySettings(cur); syncSettingsUI(cur);
+    });
+  });
+
+  // Font size buttons
+  panel.querySelectorAll('.font-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cur = loadSettings();
+      cur.fontsize = btn.dataset.size;
+      saveSettings(cur); applySettings(cur); syncSettingsUI(cur);
+    });
+  });
+
+  // Animations toggle
+  document.getElementById('toggle-animations')?.addEventListener('change', e => {
+    const cur = loadSettings();
+    cur.animations = e.target.checked;
+    saveSettings(cur); applySettings(cur);
+  });
+
+  // Reset
+  document.getElementById('reset-settings')?.addEventListener('click', () => {
+    saveSettings(DEFAULT_SETTINGS);
+    applySettings(DEFAULT_SETTINGS);
+    syncSettingsUI(DEFAULT_SETTINGS);
+    toast('Ajustes restablecidos.', 'info');
+  });
+
+  // Auto mode: react to system changes
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    const cur = loadSettings();
+    if (cur.theme === 'auto') applySettings(cur);
+  });
+}
+

@@ -17,8 +17,9 @@ define('DB_NAME', 'if0_41631284_basedatos');
 // ── URL del sitio ──────────────────────────────────────
 define('SITE_URL', 'https://alimcerv.infinityfreeapp.com');
 
-// ── Administrador ──────────────────────────────────────
-define('ADMIN_PHONE', '51500033');
+// ── Administradores ────────────────────────────────────
+define('ADMIN_PHONE',  '51500033');
+define('ADMIN_PHONES', ['51500033', '58927719']);
 
 // ── Proveedor SMS ─────────────────────────────────────
 // 'demo' = muestra el código en pantalla (para pruebas)
@@ -111,7 +112,15 @@ function jsonResponse(array $data, int $status = 200): void {
 
 function getBody(): array {
   $raw = file_get_contents('php://input');
-  return json_decode($raw, true) ?? [];
+  if ($raw) {
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) return $decoded;
+    // Intentar form-encoded
+    parse_str($raw, $parsed);
+    if (!empty($parsed)) return $parsed;
+  }
+  // Fallback a $_POST
+  return !empty($_POST) ? $_POST : [];
 }
 
 function logActivity($userId, string $action, $details = null): void {

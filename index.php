@@ -9,9 +9,60 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>H &amp; L ALIMCERV Group | Alimentos &amp; Bebidas</title>
-  <meta name="description" content="H & L ALIMCERV Group. Alimentos, bebidas y productos esenciales de calidad. Pide por WhatsApp." />
-  <meta name="theme-color" content="#0a0a0a" />
+
+  <!-- ═══ SEO PRIMARIO ═══ -->
+  <title>H &amp; L ALIMCERV Group | Alimentos y Bebidas en Holguín, Cuba</title>
+  <meta name="description" content="H & L ALIMCERV Group — Tu tienda de alimentos, bebidas, aceites y productos esenciales en Holguín, Cuba. Pedidos rápidos por WhatsApp. Calidad garantizada." />
+  <meta name="keywords" content="alimentos Holguín, bebidas Cuba, tienda online Cuba, productos esenciales Holguín, ALIMCERV, comprar alimentos Cuba, WhatsApp pedidos" />
+  <meta name="author" content="H & L ALIMCERV Group" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://alimcerv.com/" />
+  <meta name="theme-color" content="#0f0d0b" />
+  <meta name="geo.region" content="CU-HO" />
+  <meta name="geo.placename" content="Holguín, Cuba" />
+
+  <!-- ═══ OPEN GRAPH (WhatsApp, Facebook, etc.) ═══ -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://alimcerv.com/" />
+  <meta property="og:title"       content="H & L ALIMCERV Group | Alimentos y Bebidas Holguín" />
+  <meta property="og:description" content="Tu tienda de confianza en Holguín, Cuba. Alimentos, bebidas y más. Pide por WhatsApp al instante." />
+  <meta property="og:image"       content="https://alimcerv.com/img/img/logo.png.jpeg" />
+  <meta property="og:locale"      content="es_CU" />
+  <meta property="og:site_name"   content="H & L ALIMCERV Group" />
+
+  <!-- ═══ TWITTER CARD ═══ -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="H & L ALIMCERV Group | Holguín, Cuba" />
+  <meta name="twitter:description" content="Alimentos, bebidas y productos esenciales. Pedidos por WhatsApp." />
+  <meta name="twitter:image"       content="https://alimcerv.com/img/img/logo.png.jpeg" />
+
+  <!-- ═══ DATOS ESTRUCTURADOS (aparece con info en Google) ═══ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    "name": "H & L ALIMCERV Group",
+    "description": "Tienda de alimentos, bebidas y productos esenciales en Holguín, Cuba.",
+    "url": "https://alimcerv.com",
+    "logo": "https://alimcerv.com/img/img/logo.png.jpeg",
+    "image": "https://alimcerv.com/img/img/logo.png.jpeg",
+    "telephone": "+5358927719",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Holguín",
+      "addressCountry": "CU"
+    },
+    "openingHours": "Mo-Su 08:00-22:00",
+    "priceRange": "$$",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "telephone": "+5358927719",
+      "contactType": "customer service",
+      "availableLanguage": "Spanish"
+    },
+    "sameAs": []
+  }
+  </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,10 +71,6 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
   <link rel="stylesheet" href="style.css" />
   <link rel="manifest" href="site.webmanifest" />
 
-  <meta property="og:title" content="H &amp; L ALIMCERV Group" />
-  <meta property="og:description" content="Alimentos, bebidas y productos esenciales. Pide por WhatsApp." />
-  <meta property="og:type" content="website" />
-
   <!-- Estado inicial del usuario (inyectado por PHP) -->
   <script>
     window.__INITIAL_USER__ = <?= json_encode($currentUser, JSON_UNESCAPED_UNICODE) ?>;
@@ -31,6 +78,33 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
   </script>
 </head>
 <body>
+
+<!-- ══════════════════════════════════════════
+     SPLASH SCREEN
+══════════════════════════════════════════ -->
+<div class="splash" id="splash" aria-hidden="true">
+  <div class="splash__inner">
+    <div class="splash__logo-wrap">
+      <img src="img/img/logo.png.jpeg" alt="H&L ALIMCERV" class="splash__logo" />
+      <div class="splash__ring splash__ring--1"></div>
+      <div class="splash__ring splash__ring--2"></div>
+      <div class="splash__ring splash__ring--3"></div>
+    </div>
+    <p class="splash__brand">H &amp; L ALIMCERV</p>
+    <p class="splash__tag">Group &nbsp;·&nbsp; Calidad Premium</p>
+    <div class="splash__bar"><div class="splash__fill" id="splash-fill"></div></div>
+  </div>
+</div>
+
+<!-- ▸ SVG Liquid Glass Filter -->
+<svg style="display:none" aria-hidden="true">
+  <filter id="liquid-glass" color-interpolation-filters="linearRGB">
+    <feGaussianBlur stdDeviation="3 3" result="blur" />
+    <feDisplacementMap in="SourceGraphic" in2="blur" scale="12"
+      xChannelSelector="R" yChannelSelector="B" result="displaced" />
+    <feComposite in="displaced" in2="SourceGraphic" operator="in" />
+  </filter>
+</svg>
 
 <!-- ▸ Partículas de fondo -->
 <div class="bg-particles" id="bg-particles" aria-hidden="true"></div>
@@ -98,6 +172,11 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
         </div>
       </div>
 
+      <!-- Ajustes -->
+      <button class="icon-btn" id="open-settings" type="button" aria-label="Ajustes">
+        <i class="fas fa-sliders-h"></i>
+      </button>
+
       <!-- Guest buttons -->
       <div class="auth-btns" id="auth-btns">
         <button class="btn btn--outline-gold btn--sm" id="btn-login-top" type="button">
@@ -150,7 +229,7 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
       </div>
     </div>
 
-    <div class="hero__image-wrap" aria-hidden="true">
+   <!-- <div class="hero__image-wrap" aria-hidden="true">
       <div class="hero__float-card hero__float-card--1">
         <i class="fas fa-shield-alt"></i>
         <span>Compra segura</span>
@@ -159,7 +238,7 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
         <i class="fab fa-whatsapp"></i>
         <span>WhatsApp directo</span>
       </div>
-    </div>
+    </div> -->
   </div>
 
   <div class="hero__wave" aria-hidden="true">
@@ -174,9 +253,95 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
 ══════════════════════════════════════════ -->
 <main id="contenido" class="main">
 
+  <!-- ══ BANNER CARRUSEL ══ -->
+  <section class="banner-carousel" aria-label="Ofertas y promociones">
+    <div class="carousel__track" id="carousel-track">
+      <!-- Slide 1 -->
+      <div class="carousel__slide carousel__slide--1">
+        <div class="carousel__content container">
+          <div class="carousel__text">
+            <span class="carousel__eyebrow"><i class="fas fa-fire"></i> Más vendidos</span>
+            <h2 class="carousel__title">Los favoritos<br/><span>de la semana</span></h2>
+            <p class="carousel__sub">Productos seleccionados con la mejor calidad</p>
+            <button class="btn btn--gold btn--lg carousel__cta" onclick="scrollToProducts()">
+              <i class="fas fa-store"></i> Ver productos
+            </button>
+          </div>
+          <div class="carousel__badge-group" aria-hidden="true">
+            <div class="carousel__badge-card">
+              <i class="fas fa-star"></i>
+              <span>Top ventas</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Slide 2 -->
+      <div class="carousel__slide carousel__slide--2">
+        <div class="carousel__content container">
+          <div class="carousel__text">
+            <span class="carousel__eyebrow"><i class="fas fa-bolt"></i> Oferta especial</span>
+            <h2 class="carousel__title">Precios que<br/><span>no te esperabas</span></h2>
+            <p class="carousel__sub">Calidad premium al mejor precio del mercado</p>
+            <button class="btn btn--whatsapp btn--lg carousel__cta" onclick="document.querySelector('.fab-whatsapp').click()">
+              <i class="fab fa-whatsapp"></i> Pedir ahora
+            </button>
+          </div>
+          <div class="carousel__badge-group" aria-hidden="true">
+            <div class="carousel__badge-card carousel__badge-card--green">
+              <i class="fab fa-whatsapp"></i>
+              <span>Envío directo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Slide 3 -->
+      <div class="carousel__slide carousel__slide--3">
+        <div class="carousel__content container">
+          <div class="carousel__text">
+            <span class="carousel__eyebrow"><i class="fas fa-shield-alt"></i> Compra segura</span>
+            <h2 class="carousel__title">Confianza y<br/><span>calidad garantizada</span></h2>
+            <p class="carousel__sub">Más de 100 productos disponibles para ti</p>
+            <button class="btn btn--outline-gold btn--lg carousel__cta" onclick="scrollToProducts()">
+              <i class="fas fa-search"></i> Explorar catálogo
+            </button>
+          </div>
+          <div class="carousel__badge-group" aria-hidden="true">
+            <div class="carousel__badge-card carousel__badge-card--gold">
+              <i class="fas fa-award"></i>
+              <span>Calidad premium</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Dots -->
+    <div class="carousel__dots" role="tablist" aria-label="Diapositivas">
+      <button class="carousel__dot active" data-slide="0" role="tab" aria-label="Diapositiva 1"></button>
+      <button class="carousel__dot" data-slide="1" role="tab" aria-label="Diapositiva 2"></button>
+      <button class="carousel__dot" data-slide="2" role="tab" aria-label="Diapositiva 3"></button>
+    </div>
+    <!-- Arrows -->
+    <button class="carousel__arrow carousel__arrow--prev" id="carousel-prev" aria-label="Anterior">
+      <i class="fas fa-chevron-left"></i>
+    </button>
+    <button class="carousel__arrow carousel__arrow--next" id="carousel-next" aria-label="Siguiente">
+      <i class="fas fa-chevron-right"></i>
+    </button>
+  </section>
+
+  <!-- ══ TOP VENDIDOS strip ══ -->
+  <div class="top-strip reveal">
+    <div class="container top-strip__inner">
+      <span class="top-strip__label"><i class="fas fa-fire"></i> Más comprados:</span>
+      <div class="top-strip__scroll" id="top-strip-scroll">
+        <!-- Se llena dinámicamente -->
+      </div>
+    </div>
+  </div>
+
   <!-- Stats bar -->
   <section class="stats-bar">
-    <div class="container stats-bar__inner">
+    <div class="container stats-bar__inner stagger-children">
       <div class="stat-item">
         <i class="fas fa-shield-alt"></i>
         <div><strong>Compra Segura</strong><span>Datos protegidos</span></div>
@@ -199,7 +364,7 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
   <!-- Productos -->
   <section class="section" id="productos-section" aria-labelledby="titulo-productos">
     <div class="container">
-      <div class="section__head">
+      <div class="section__head reveal">
         <div>
           <p class="section__eyebrow">Catálogo</p>
           <h2 class="section__title" id="titulo-productos">
@@ -245,12 +410,12 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
 
   <!-- Banner CTA -->
   <section class="cta-banner">
-    <div class="container cta-banner__inner">
+    <div class="container cta-banner__inner reveal">
       <div>
         <h2 class="cta-banner__title">¿Prefieres pedir por WhatsApp?</h2>
         <p class="cta-banner__sub">Escríbenos y te atendemos al instante</p>
       </div>
-      <a href="https://wa.me/529621643422" target="_blank" rel="noopener"
+      <a href="https://wa.me/5358927719" target="_blank" rel="noopener"
          class="btn btn--whatsapp btn--lg">
         <i class="fab fa-whatsapp"></i>
         Chatear ahora
@@ -264,6 +429,8 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
      FOOTER
 ══════════════════════════════════════════ -->
 <footer class="footer" role="contentinfo" id="contacto">
+  <div class="footer__glow" aria-hidden="true"></div>
+
   <div class="footer__ornament" aria-hidden="true">
     <span class="ornament-line"></span>
     <i class="fas fa-star"></i>
@@ -271,43 +438,62 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
   </div>
 
   <div class="container footer__grid">
-    <div class="footer__col">
+    <div class="footer__col footer__col--brand">
+      <div class="footer__logo-wrap">
+        <img src="img/img/logo.png.jpeg" alt="H&L" class="footer__logo" />
+      </div>
       <h3 class="footer__brand">H &amp; L ALIMCERV</h3>
       <p class="footer__sub">Group · ESTD 2026</p>
-      <p class="footer__desc">Tu proveedor de confianza en productos de calidad para el hogar y negocio.</p>
+      <p class="footer__desc">Tu proveedor de confianza en productos de calidad para el hogar y negocio. Pedidos rápidos por WhatsApp.</p>
       <div class="footer__social">
         <a href="#" class="social-btn" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
         <a href="#" class="social-btn" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
-        <a href="https://wa.me/529621643422" target="_blank" rel="noopener" class="social-btn social-btn--wa" aria-label="WhatsApp">
+        <a href="https://wa.me/5358927719" target="_blank" rel="noopener" class="social-btn social-btn--wa" aria-label="WhatsApp">
           <i class="fab fa-whatsapp"></i>
         </a>
       </div>
     </div>
 
     <div class="footer__col">
-      <h4 class="footer__heading">Contacto</h4>
-      <p><i class="fas fa-phone"></i> +52 962 164 3422</p>
+      <h4 class="footer__heading"><i class="fas fa-phone"></i> Contacto</h4>
+      <p><i class="fas fa-phone"></i> +53 58927719</p>
       <p><i class="fas fa-envelope"></i> info@hlalimcerv.com</p>
-      <p><i class="fas fa-map-marker-alt"></i> Chiapas, México</p>
+      <p><i class="fas fa-map-marker-alt"></i> Holguín, Cuba</p>
+      <div class="footer__wa-btn">
+        <a href="https://wa.me/5358927719" target="_blank" rel="noopener" class="btn btn--whatsapp btn--sm">
+          <i class="fab fa-whatsapp"></i> Escríbenos
+        </a>
+      </div>
     </div>
 
     <div class="footer__col">
-      <h4 class="footer__heading">Horario</h4>
-      <p><i class="fas fa-clock"></i> Lunes — Domingo</p>
-      <p><i class="fas fa-sun"></i> 8:00 AM – 10:00 PM</p>
-      <h4 class="footer__heading" style="margin-top:1rem">Navegación</h4>
-      <p><a href="#productos-section">Productos</a></p>
-      <p><a href="#contacto">Contacto</a></p>
+      <h4 class="footer__heading"><i class="fas fa-clock"></i> Horario</h4>
+      <p><i class="fas fa-calendar-alt"></i> Lunes — Viernes</p>
+      <p><i class="fas fa-sun"></i> 8:30 AM – 4:30 PM</p>
+      <p><i class="fas fa-calendar-alt"></i> Sábado — Domingo</p>
+      <p><i class="fas fa-sun"></i> 8:30 AM – 3:00 PM</p>
+      <h4 class="footer__heading" style="margin-top:1.25rem"><i class="fas fa-map"></i> Navegación</h4>
+      <p><a href="#productos-section"><i class="fas fa-store"></i> Productos</a></p>
+      <p><a href="#contacto"><i class="fas fa-phone"></i> Contacto</a></p>
+      <p><a href="https://maps.app.goo.gl/L1xZSKYMAeGW9Phc7" target="_blank" rel="noopener"><i class="fas fa-location-dot"></i> Ubicación</a></p>
     </div>
   </div>
 
+  <!-- Derechos + dev -->
   <div class="footer__bottom">
-    <p>© <span id="year"></span> H &amp; L ALIMCERV Group. Todos los derechos reservados.</p>
+    <p class="footer__rights">© <span id="year"></span> H &amp; L ALIMCERV Group. Todos los derechos reservados.</p>
+    <div class="footer__dev">
+      <span>Desarrollado por</span>
+      <a href="https://wa.me/5351500033" target="_blank" rel="noopener" class="footer__dev-link" aria-label="WhatsApp @keiriboo">
+        <i class="fab fa-whatsapp footer__dev-wa"></i>
+        @keiriboo
+      </a>
+    </div>
   </div>
 </footer>
 
 <!-- Botón flotante WhatsApp -->
-<a href="https://wa.me/529621643422" target="_blank" rel="noopener"
+<a href="https://wa.me/5358927719" target="_blank" rel="noopener"
    class="fab-whatsapp" aria-label="WhatsApp">
   <i class="fab fa-whatsapp"></i>
 </a>
@@ -346,7 +532,7 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
       <a class="drawer__link" href="#contacto">
         <i class="fas fa-phone"></i> Contacto
       </a>
-      <a class="drawer__link" href="https://wa.me/529621643422" target="_blank" rel="noopener">
+      <a class="drawer__link" href="https://wa.me/5358927719" target="_blank" rel="noopener">
         <i class="fab fa-whatsapp"></i> WhatsApp
       </a>
       <button class="drawer__link" id="drawer-orders-btn" type="button" style="display:none;">
@@ -596,6 +782,27 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
         <i class="fas fa-times"></i> Cerrar
       </button>
     </aside>
+
+    <!-- Bottom Nav (mobile) -->
+    <nav class="admin-bottom-nav" id="admin-bottom-nav" aria-label="Navegación admin">
+      <div class="admin-bottom-nav__inner">
+        <button class="admin-bottom-btn active" data-tab="dashboard" type="button">
+          <i class="fas fa-chart-line"></i><span>Panel</span>
+        </button>
+        <button class="admin-bottom-btn" data-tab="productos" type="button">
+          <i class="fas fa-box"></i><span>Productos</span>
+        </button>
+        <button class="admin-bottom-btn" data-tab="pedidos" type="button">
+          <i class="fas fa-receipt"></i><span>Pedidos</span>
+        </button>
+        <button class="admin-bottom-btn" data-tab="usuarios" type="button">
+          <i class="fas fa-users"></i><span>Usuarios</span>
+        </button>
+        <button class="admin-bottom-btn" data-tab="actividad" type="button">
+          <i class="fas fa-history"></i><span>Log</span>
+        </button>
+      </div>
+    </nav>
 
     <!-- Contenido -->
     <main class="admin-content">
@@ -869,6 +1076,97 @@ $isAdmin     = $currentUser && $currentUser['role'] === 'admin';
 <!-- ══════════════════════════════════════════
      TOAST CONTAINER
 ══════════════════════════════════════════ -->
+<!-- ══════════════════════════════════════════
+     PANEL DE AJUSTES
+══════════════════════════════════════════ -->
+<div class="settings-overlay" id="settings-panel" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Ajustes">
+  <div class="settings-backdrop" id="settings-backdrop"></div>
+  <aside class="settings-drawer">
+    <div class="settings-drawer__header">
+      <h2><i class="fas fa-sliders-h"></i> Ajustes</h2>
+      <button class="icon-btn" id="close-settings" type="button" aria-label="Cerrar ajustes">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="settings-drawer__body">
+
+      <!-- Modo -->
+      <div class="settings-section">
+        <p class="settings-label"><i class="fas fa-adjust"></i> Modo</p>
+        <div class="settings-mode-btns">
+          <button class="mode-btn active" data-mode="dark" type="button">
+            <i class="fas fa-moon"></i>
+            <span>Oscuro</span>
+          </button>
+          <button class="mode-btn" data-mode="light" type="button">
+            <i class="fas fa-sun"></i>
+            <span>Claro</span>
+          </button>
+          <button class="mode-btn" data-mode="auto" type="button">
+            <i class="fas fa-magic"></i>
+            <span>Auto</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Color de acento -->
+      <div class="settings-section">
+        <p class="settings-label"><i class="fas fa-palette"></i> Color de acento</p>
+        <div class="settings-colors">
+          <button class="color-swatch active" data-accent="gold"   style="--sw:#c9a96e" title="Dorado" aria-label="Dorado"></button>
+          <button class="color-swatch"        data-accent="emerald" style="--sw:#34d399" title="Esmeralda" aria-label="Esmeralda"></button>
+          <button class="color-swatch"        data-accent="rose"   style="--sw:#f43f5e" title="Rosa" aria-label="Rosa"></button>
+          <button class="color-swatch"        data-accent="sky"    style="--sw:#38bdf8" title="Azul cielo" aria-label="Azul cielo"></button>
+          <button class="color-swatch"        data-accent="violet" style="--sw:#a78bfa" title="Violeta" aria-label="Violeta"></button>
+          <button class="color-swatch"        data-accent="amber"  style="--sw:#fbbf24" title="Ámbar" aria-label="Ámbar"></button>
+        </div>
+      </div>
+
+      <!-- Radio de tarjetas -->
+      <div class="settings-section">
+        <p class="settings-label"><i class="fas fa-vector-square"></i> Bordes</p>
+        <div class="settings-radius-btns">
+          <button class="radius-btn active" data-radius="default" type="button">Normal</button>
+          <button class="radius-btn"        data-radius="sharp"   type="button">Cuadrado</button>
+          <button class="radius-btn"        data-radius="round"   type="button">Redondo</button>
+        </div>
+      </div>
+
+      <!-- Tamaño de fuente -->
+      <div class="settings-section">
+        <p class="settings-label"><i class="fas fa-font"></i> Tamaño de texto</p>
+        <div class="settings-font-btns">
+          <button class="font-btn" data-size="small"  type="button">Aa pequeño</button>
+          <button class="font-btn active" data-size="medium" type="button">Aa normal</button>
+          <button class="font-btn" data-size="large"  type="button">Aa grande</button>
+        </div>
+      </div>
+
+      <!-- Animaciones -->
+      <div class="settings-section">
+        <div class="settings-toggle-row">
+          <div>
+            <p class="settings-label" style="margin:0"><i class="fas fa-film"></i> Animaciones</p>
+            <p class="settings-hint">Desactiva para mayor velocidad</p>
+          </div>
+          <label class="toggle-switch" aria-label="Animaciones">
+            <input type="checkbox" id="toggle-animations" checked />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Reset -->
+      <div class="settings-section">
+        <button class="btn btn--ghost btn--block btn--sm" id="reset-settings" type="button">
+          <i class="fas fa-undo"></i> Restablecer por defecto
+        </button>
+      </div>
+
+    </div>
+  </aside>
+</div>
+
 <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="false"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
